@@ -118,10 +118,10 @@ jobs:
               KSU_VER=$(./sh/extract_ksuver.sh "https://github.com/SukiSU-Ultra/SukiSU-Ultra" "kernel/Makefile" "." "susfs-main" || echo "unknown")
               ;;
             "xxKSU")
-              KSU_VER=$(./sh/get_ksuver.sh "backslashxx" "KernelSU" "master" || echo "unknown")
+              KSU_VER=$(./sh/extract_ksuver.sh "https://github.com/backslashxx/KernelSU" "kernel/Makefile" "." || echo "unknown")
               ;;
             "KowSU")
-              KSU_VER=$(./sh/get_ksuver.sh "KOWX712" "KernelSU" "master" || echo "unknown")
+              KSU_VER=$(./sh/extract_ksuver.sh "https://github.com/KOWX712/KernelSU" "kernel/Makefile" "." || echo "unknown")
               ;;
           esac
 
