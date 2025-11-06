@@ -1,4 +1,4 @@
-vname: Build Libra Kernel (Clang 22.0.0git-20250928)
+name: Build Libra Kernel (Clang 22.0.0git-20250928)
 
 on:
   push:
