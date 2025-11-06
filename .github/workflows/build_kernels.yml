@@ -57,7 +57,7 @@ jobs:
             ak3_suffix: "_KowSU"
             repo: "KOWX712/KernelSU"
             folder: "KernelSU"
-            branch: "staging"
+            branch: "master"
             kernel_patches: "sultan/scope-min-hooks-v1.6.patch"
             extra_configs: ""
           - type: MKSU
@@ -132,13 +132,13 @@ jobs:
               KSU_VER=$(./sh/extract_ksuver.sh "https://github.com/SukiSU-Ultra/SukiSU-Ultra" "kernel/Makefile" "." "susfs-main" || echo "unknown")
               ;;
             "xxKSU")
-              KSU_VER=$(./sh/extract_ksuver.sh "https://github.com/backslashxx/KernelSU" "kernel/Makefile" "." || echo "unknown")
+              KSU_VER=$(./sh/extract_ksuver.sh "https://github.com/backslashxx/KernelSU" "kernel/Makefile" "." "master"|| echo "unknown")
               ;;
             "KowSU")
-              KSU_VER=$(./sh/extract_ksuver.sh "https://github.com/KOWX712/KernelSU" "kernel/Makefile" "." "staging" || echo "unknown")
+              KSU_VER=$(./sh/get_ksuver.sh "KOWX712" "KernelSU" "master" || echo "unknown")
               ;;
             "MKSU")
-              KSU_VER=$(./sh/extract_ksuver.sh "https://github.com/5ec1cff/KernelSU" "kernel/Makefile" "." "staging" || echo "unknown")
+              KSU_VER=$(./sh/get.sh "5ec1cff" "KernelSU" "main" || echo "unknown")
               ;;
           esac
 
