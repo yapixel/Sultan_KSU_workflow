@@ -15,32 +15,39 @@ jobs:
       CCACHE_MAXSIZE: 5G
 
     steps:
-      - name: Checkout Kernel Source
+      - name: Checkout kernel source
         uses: actions/checkout@v4
         with:
           repository: ximi-libra-test/android_kernel_xiaomi_libra
           ref: personal
 
-      - name: Install Dependencies
+      - name: Install build dependencies
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y bc bison flex libssl-dev make ccache git zip wget python3 > /dev/null
 
+      # --------------------------------------------------------------
+      # 1. Download + extract Clang (exact layout you showed)
+      # --------------------------------------------------------------
       - name: Download and setup Clang
         run: |
           mkdir -p $HOME/clang
           cd $HOME/clang
-          
+
           wget -q "$CLANG_URL" -O clang.tar.gz
+          # Strip the top-level folder (Clang-22.0.0git-20250928/)
           tar -xzf clang.tar.gz --strip-components=1
           rm -f clang.tar.gz
-          
+
           echo "CLANG_PATH=$HOME/clang" >> $GITHUB_ENV
 
       - name: Verify Clang
         run: |
           $CLANG_PATH/bin/clang --version
 
+      # --------------------------------------------------------------
+      # 2. ccache
+      # --------------------------------------------------------------
       - name: Setup ccache
         run: |
           mkdir -p .ccache
@@ -48,20 +55,26 @@ jobs:
           ccache -M $CCACHE_MAXSIZE
           ccache -z
 
-      - name: Build Kernel
+      # --------------------------------------------------------------
+      # 3. Build the kernel
+      # --------------------------------------------------------------
+      - name: Build kernel
         run: |
           export PATH="$CLANG_PATH/bin:$PATH"
           bash kernel_builder_clang.sh
           ccache -s
 
-      - name: Package & Upload
+      # --------------------------------------------------------------
+      # 4. Package & upload
+      # --------------------------------------------------------------
+      - name: Package and rename zip
         run: |
           ZIP=$(ls Kernel-*.zip | head -n1)
           FINAL="Libra-Kernel-Clang22-20250928-$(git rev-parse --short HEAD).zip"
           mv "$ZIP" "$FINAL"
           echo "FINAL_ZIP=$FINAL" >> $GITHUB_ENV
 
-      - name: Upload Artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.FINAL_ZIP }}
