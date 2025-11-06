@@ -1,4 +1,4 @@
-name: Build Libra Kernel (Clang 22.0.0git-20250928)
+vname: Build Libra Kernel (Clang 22.0.0git-20250928)
 
 on:
   push:
@@ -27,16 +27,14 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y bc bison flex libssl-dev make ccache git zip wget python3 > /dev/null
 
-      # ← FIXED STEP -------------------------------------------------
-      - name: Download & Extract Clang 22.0.0git (20250928)
+      
+      - name: Download & Extract Clang (Robust, No mv)
         run: |
           wget -q "$CLANG_URL" -O clang.tar.gz
-          tar -xzf clang.tar.gz               # extracts → Clang-22.0.0git-20250928/
-          rm clang.tar.gz
-          mv Clang-22.0.0git-20250928 "$CLANG_DIR"
-          echo "CLANG_PATH=$(pwd)/$CLANG_DIR" >> $GITHUB_ENV
-      # --------------------------------------------------------------
-
+          mkdir -p clang-22.0.0git
+          tar -xzf clang.tar.gz -C clang-22.0.0git --strip-components=1
+          rm -f clang.tar.gz
+          echo "CLANG_PATH=$(pwd)/clang-22.0.0git" >> $GITHUB_ENV
       - name: Verify Clang
         run: |
           clang="$CLANG_PATH/bin/clang"
