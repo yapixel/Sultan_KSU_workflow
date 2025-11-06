@@ -1,60 +1,69 @@
-name: Build Xiaomi Libra Kernel (Clang 22)
+name: Build Libra Kernel (Clang 22.0.0git-20250928)
 
 on:
   push:
     branches: [ personal ]
-  workflow_dispatch:  # Manual trigger
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-22.04
+    env:
+      CLANG_URL: https://github.com/ZyCromerZ/Clang/releases/download/22.0.0git-20250928-release/Clang-22.0.0git-20250928.tar.gz
+      CLANG_DIR: clang-22.0.0git
+      KERNEL_DEFCONFIG: libra_defconfig
+      JOBS: 8
+      CCACHE_MAXSIZE: 5G
+
     steps:
       - name: Checkout Kernel Source
         uses: actions/checkout@v4
         with:
           repository: ximi-libra-test/android_kernel_xiaomi_libra
           ref: personal
-          fetch-depth: 0  # Full history for git describe if needed
 
       - name: Install Dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y bc bison flex libssl-dev make ccache git zip unzip wget curl bc python3
+          sudo apt-get update -qq
+          sudo apt-get install -y bc bison flex libssl-dev make ccache git zip wget python3 > /dev/null
 
-      - name: Setup Clang 22 (ZyCromerZ)
+      - name: Download Clang 22.0.0git (20250928)
         run: |
-          # Fetch latest Clang 22 release info (tag and asset URL)
-          CLANG_TAG=$(curl -s https://api.github.com/repos/ZyCromerZ/Clang/releases | grep -Po '"tag_name": "\K(Clang-22[^"]+)' | head -n1)
-          if [[ -z "$CLANG_TAG" ]]; then
-            echo "Failed to fetch Clang 22 tag; falling back to known latest"
-            CLANG_TAG="Clang-22.0.0git-20250928-release"  # Update if newer available
-          fi
-          ASSET_URL="https://github.com/ZyCromerZ/Clang/releases/download/${CLANG_TAG}/Clang-${CLANG_TAG#Clang-}.tar.gz"
-          wget -q "$ASSET_URL" -O clang.tar.gz
-          tar -xzf clang.tar.gz -C . --strip-components=1
-          echo "CLANG_PATH=$(pwd)" >> $GITHUB_ENV
-          echo "CLANG_TAG=$CLANG_TAG" >> $GITHUB_ENV
-          clang --version | head -n1  # Verify
+          wget -q "$CLANG_URL" -O clang.tar.gz
+          tar -xzf clang.tar.gz
+          rm clang.tar.gz
+          mv Clang-22.0.0git-20250928 "$CLANG_DIR"
+          echo "CLANG_PATH=$(pwd)/$CLANG_DIR" >> $GITHUB_ENV
+
+      - name: Verify Clang
+        run: |
+          clang="$CLANG_PATH/bin/clang"
+          echo "Clang path: $clang"
+          "$clang" --version
 
       - name: Setup ccache
         run: |
-          export CCACHE_DIR="$RUNNER_TEMP/.ccache"
-          export CCACHE_MAXSIZE=5G  # Reasonable for CI
-          ccache -z  # Initialize stats
+          mkdir -p .ccache
+          echo "CCACHE_DIR=$(pwd)/.ccache" >> $GITHUB_ENV
+          ccache -M $CCACHE_MAXSIZE
+          ccache -z
 
       - name: Build Kernel
-        env:
-          KERNEL_DEFCONFIG: libra_defconfig
-          CCACHE_MAXSIZE: 5G
-          JOBS: 8  # Conservative for GitHub runners
         run: |
-          export PATH="${CLANG_PATH}/bin:${PATH}"
+          export PATH="$CLANG_PATH/bin:$PATH"
           bash kernel_builder_clang.sh
-          ccache -s  # Show build stats
+          ccache -s
 
-      - name: Upload Kernel ZIP
+      - name: Package & Upload
+        run: |
+          ZIP=$(ls Kernel-*.zip | head -n1)
+          FINAL="Libra-Kernel-Clang22-20250928-$(git rev-parse --short HEAD).zip"
+          mv "$ZIP" "$FINAL"
+          echo "FINAL_ZIP=$FINAL" >> $GITHUB_ENV
+
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel-libra-${{ env.CLANG_TAG }}-${{ github.sha_short }}.zip
-          path: Kernel-*.zip
-          retention-days: 30
+          name: ${{ env.FINAL_ZIP }}
+          path: ${{ env.FINAL_ZIP }}
+          retention-days: 90
