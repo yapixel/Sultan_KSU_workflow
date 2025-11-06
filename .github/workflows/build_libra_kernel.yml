@@ -9,9 +9,9 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     env:
-      CLANG_URL: https://github.com/ZyCromerZ/Clang/releases/download/22.0.0git-20250928-release/Clang-22.0.0git-20250928.tar.gz
+      
       KERNEL_DEFCONFIG: libra_defconfig
-      JOBS: 8
+      JOBS: 4
       CCACHE_MAXSIZE: 5G
 
     steps:
@@ -29,15 +29,18 @@ jobs:
       # --------------------------------------------------------------
       # 1. Download + extract Clang (inside repo, exact layout)
       # --------------------------------------------------------------
-      - name: Download and setup Clang
-        run: |
-          mkdir -p clang
-          cd clang
-
-          wget -q "$CLANG_URL" -O clang.tar.gz
-          tar -xzf clang.tar.gz 
-          rm -f clang.tar.gz
-
+    - name: Download and setup Clang
+      run: |
+        mkdir -p $HOME/clang
+        cd $HOME/clang
+        
+        # Download latest Clang from Google
+        wget https://github.com/ZyCromerZ/Clang/releases/download/22.0.0git-20250928-release/Clang-22.0.0git-20250928.tar.gz -O clang.tar.gz
+        tar -xzf clang.tar.gz
+        rm clang.tar.gz
+        
+        echo "CLANG_PATH=$HOME/clang/bin" >> $GITHUB_ENV
+        echo "$HOME/clang/bin" >> $GITHUB_PATH
           
 
       - name: Verify Clang
