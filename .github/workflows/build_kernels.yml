@@ -60,8 +60,22 @@ jobs:
             branch: "staging"
             kernel_patches: "sultan/scope-min-hooks-v1.6.patch"
             extra_configs: ""
+          - type: MKSU
+            ksu: true
+            ak3_suffix: "_MKSU"
+            repo: "5ec1cff/KernelSU"
+            folder: "KernelSU"
+            branch: "main"
+            kernel_patches: "sultan/scope-min-hooks-v1.6.patch"
+            extra_configs: ""
         susfs: [false, true]
         exclude:
+          - variant:
+              type: xxKSU
+            susfs: true
+          - variant:
+              type: MKSU
+            susfs: true
           - variant:
               type: xxKSU
             susfs: true
@@ -122,6 +136,9 @@ jobs:
               ;;
             "KowSU")
               KSU_VER=$(./sh/extract_ksuver.sh "https://github.com/KOWX712/KernelSU" "kernel/Makefile" "." "staging" || echo "unknown")
+              ;;
+            "MKSU")
+              KSU_VER=$(./sh/extract_ksuver.sh "https://github.com/5ec1cff/KernelSU" "kernel/Makefile" "." "staging" || echo "unknown")
               ;;
           esac
 
@@ -187,6 +204,7 @@ jobs:
             "SukiSU") echo "SukiSU Ultra with scope-min-hooks v1.6" ;;
             "xxKSU")  echo "xxKSU (backslashxx/KernelSU) integrated" ;;
             "KowSU")  echo "KowSU (KOWX712/KernelSU) integrated" ;;
+            "MKSU")  echo "MKSU (51ec1cff/KernelSU) integrated" ;;
           esac
 
       - name: Apply SUSFS Patches
@@ -267,17 +285,21 @@ jobs:
           SUKI_URL=$(git ls-remote https://github.com/SukiSU-Ultra/SukiSU-Ultra main | awk '{print "https://github.com/SukiSU-Ultra/SukiSU-Ultra/commit/"$1}')
           XXKSU_URL=$(git ls-remote https://github.com/backslashxx/KernelSU master | awk '{print "https://github.com/backslashxx/KernelSU/commit/"$1}')
           KOWSU_URL=$(git ls-remote https://github.com/KOWX712/KernelSU master | awk '{print "https://github.com/KOWX712/KernelSU/commit/"$1}')
+          MKSU_URL=$(git ls-remote https://github.com/5ec1cff/KernelSU main | awk '{print "https://github.com/5ec1cff/KernelSU/commit/"$1}')
 
           SUKI_V=$(./sh/extract_ksuver.sh "https://github.com/SukiSU-Ultra/SukiSU-Ultra" "kernel/Makefile" "." "main" || echo "unknown")
-          XXKSU_V=$(./sh/get_ksuver.sh "backslashxx" "KernelSU" "master" || echo "unknown")
-          KOWSU_V=$(./sh/get_ksuver.sh "KOWX712" "KernelSU" "master" || echo "unknown")
+          XXKSU_V=$(./sh/extract_ksuver.sh "https://github.com/backslashxx/KernelSU" "kernel/Makefile" "." "master" || echo "unknown")
+          KOWSU_V=$(./sh/extract_ksuver.sh "https://github.com/KOWX712/KernelSU" "kernel/Makefile" "." "master" || echo "unknown")
+          MKSU_V=$(./sh/extract_ksuver.sh "https://github.com/5ec1cff/KernelSU" "kernel/Makefile" "." "main" || echo "unknown")
 
           echo "SUKI_URL=$SUKI_URL" >> $GITHUB_ENV
           echo "XXKSU_URL=$XXKSU_URL" >> $GITHUB_ENV
           echo "KOWSU_URL=$KOWSU_URL" >> $GITHUB_ENV
+          echo "MKSU_URL=$MKSU_URL" >> $GITHUB_ENV
           echo "SUKI_V=$SUKI_V" >> $GITHUB_ENV
           echo "XXKSU_V=$XXKSU_V" >> $GITHUB_ENV
           echo "KOWSU_V=$KOWSU_V" >> $GITHUB_ENV
+          echo "MKSU_V=$MKSU_V" >> $GITHUB_ENV
 
       - name: Generate Release Body
         id: release_body
@@ -290,15 +312,16 @@ jobs:
           -> https://github.com/sidex15/ksu_module_susfs
           
           Managers:
-          -> https://github.com/WildKernels/Wild_KSU
-          -> https://github.com/KernelSU-Next/KernelSU-Next
-          -> https://github.com/rsuntk/KernelSU
+          -> https://github.com/5ec1cff/KernelSU
+          -> https://github.com/backslashxx/KernelSU
+          -> https://github.com/KOWX712/KernelSU
           -> https://github.com/SukiSU-Ultra/SukiSU-Ultra
           
           Features:
           [+] KowSU [${{ env.KOWSU_V }}](${{ env.KOWSU_URL }})
           [+] SukiSU [${{ env.SUKI_V }}](${{ env.SUKI_URL }})
           [+] xxKSU [${{ env.XXKSU_V }}](${{ env.XXKSU_URL }})
+          [+] MKSU  [${{ env.MKSU_V }}](${{ env.MKSU_URL }})
           [+] SUSFS v1.5.12
           EOF
 
@@ -328,4 +351,4 @@ jobs:
           body_path: release_body.md
           files: |
             artifacts/**/*.zip
-            artifacts/**/*.sha256
+            
