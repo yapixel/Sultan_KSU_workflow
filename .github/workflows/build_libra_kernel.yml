@@ -10,7 +10,6 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       CLANG_URL: https://github.com/ZyCromerZ/Clang/releases/download/22.0.0git-20250928-release/Clang-22.0.0git-20250928.tar.gz
-      CLANG_DIR: clang-22.0.0git
       KERNEL_DEFCONFIG: libra_defconfig
       JOBS: 8
       CCACHE_MAXSIZE: 5G
@@ -27,19 +26,20 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y bc bison flex libssl-dev make ccache git zip wget python3 > /dev/null
 
-      
-      - name: Download & Extract Clang (Robust, No mv)
+      - name: Download and setup Clang
         run: |
+          mkdir -p $HOME/clang
+          cd $HOME/clang
+          
           wget -q "$CLANG_URL" -O clang.tar.gz
-          mkdir -p clang-22.0.0git
-          tar -xzf clang.tar.gz -C clang-22.0.0git --strip-components=1
+          tar -xzf clang.tar.gz --strip-components=1
           rm -f clang.tar.gz
-          echo "CLANG_PATH=$(pwd)/clang-22.0.0git" >> $GITHUB_ENV
+          
+          echo "CLANG_PATH=$HOME/clang" >> $GITHUB_ENV
+
       - name: Verify Clang
         run: |
-          clang="$CLANG_PATH/bin/clang"
-          echo "Clang path: $clang"
-          "$clang" --version
+          $CLANG_PATH/bin/clang --version
 
       - name: Setup ccache
         run: |
