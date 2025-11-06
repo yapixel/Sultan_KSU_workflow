@@ -27,13 +27,15 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y bc bison flex libssl-dev make ccache git zip wget python3 > /dev/null
 
-      - name: Download Clang 22.0.0git (20250928)
+      # ← FIXED STEP -------------------------------------------------
+      - name: Download & Extract Clang 22.0.0git (20250928)
         run: |
           wget -q "$CLANG_URL" -O clang.tar.gz
-          tar -xzf clang.tar.gz
+          tar -xzf clang.tar.gz               # extracts → Clang-22.0.0git-20250928/
           rm clang.tar.gz
           mv Clang-22.0.0git-20250928 "$CLANG_DIR"
           echo "CLANG_PATH=$(pwd)/$CLANG_DIR" >> $GITHUB_ENV
+      # --------------------------------------------------------------
 
       - name: Verify Clang
         run: |
