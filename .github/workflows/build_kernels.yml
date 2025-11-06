@@ -65,7 +65,7 @@ jobs:
             ak3_suffix: "_MKSU"
             repo: "5ec1cff/KernelSU"
             folder: "KernelSU"
-            branch: "staging"
+            branch: "main"
             kernel_patches: "sultan/scope-min-hooks-v1.6.patch"
             extra_configs: ""
         susfs: [false, true]
