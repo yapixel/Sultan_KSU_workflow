@@ -74,6 +74,9 @@ jobs:
               type: xxKSU
             susfs: true
           - variant:
+              type: MKSU
+            susfs: true
+          - variant:
               type: xxKSU
             susfs: true
           - variant:
