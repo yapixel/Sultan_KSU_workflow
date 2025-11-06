@@ -35,14 +35,14 @@ jobs:
           cd clang
 
           wget -q "$CLANG_URL" -O clang.tar.gz
-          tar -xzf clang.tar.gz --strip-components=1
+          tar -xzf clang.tar.gz 
           rm -f clang.tar.gz
 
-          echo "CLANG_PATH=$(pwd)" >> $GITHUB_ENV
+          
 
       - name: Verify Clang
         run: |
-          "$CLANG_PATH/bin/clang" --version
+          "$HOME/clang/bin/clang" --version
 
       # --------------------------------------------------------------
       # 2. ccache
