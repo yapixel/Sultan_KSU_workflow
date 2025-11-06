@@ -88,7 +88,7 @@ jobs:
 
       - name: Clone Libra kernel source
         run: |
-          git clone --depth=1 https://github.com/ximi-libra-test/android_kernel_xiaomi_libra.git -b personal ${{ env.KERNEL_DIR }}
+          git clone --depth=1 https://github.com/ximi-libra-test/android_kernel_xiaomi_libra.git  ${{ env.KERNEL_DIR }}
 
       - name: Prepare out directory
         working-directory: ${{ env.KERNEL_DIR }}
