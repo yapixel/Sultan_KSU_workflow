@@ -1,148 +1,212 @@
-name: Build Libra Kernel (Clang 22 + LOS 19.1 GCC)
+name: Build Libra Kernel with Clang 22
 
 on:
   push:
-    branches: [ main, master ]
+    branches:
+      - main
+      - master
+      - personal
   pull_request:
-    branches: [ main, master ]
+    branches:
+      - main
+      - master
+      - personal
   workflow_dispatch:
 
 env:
+  # Build configuration
   KERNEL_DIR: kernel
   CONFIG_FILE: arch/arm64/configs/libra_defconfig
   OUT_DIR: out
-
+  
+  # Compiler configuration
+  USE_CCACHE: 1
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  
+  # GitHub-specific
   GIT_SHORT_SHA: ${{ github.event.pull_request.head.sha && github.event.pull_request.head.sha || github.sha }}
 
 jobs:
-  build:
+  build-kernel:
     runs-on: ubuntu-22.04
-    permissions:
-      contents: write
-
+    
     steps:
-      - name: Maximize disk space
-        run: |
-          echo "===== Before Cleanup ====="
+    - name: Check Initial Disk Space
+      run: |
+          echo "===== Initial Total Disk Space in GB ====="
           df -BG
+          
+    - name: Download Apache Arrow's util_free_space.sh
+      run: |
           curl -L -o util_free_space.sh https://raw.githubusercontent.com/apache/arrow/main/ci/scripts/util_free_space.sh
           chmod +x util_free_space.sh
           ./util_free_space.sh
-          echo "===== After Cleanup ====="
+          
+    - name: Check Disk Space After Cleanup
+      run: |
+          echo "===== Total Disk Space After Cleanup in GB ====="
           df -BG
 
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+    - name: Set up environment
+      run: |
+        echo "GIT_SHORT_SHA=$(echo ${{ env.GIT_SHORT_SHA }} | cut -c1-7)" >> $GITHUB_ENV
+        echo "THREADS=$(nproc)" >> $GITHUB_ENV
 
-      - name: Setup environment
-        run: |
-          echo "GIT_SHORT_SHA=$(echo ${{ env.GIT_SHORT_SHA }} | cut -c1-7)" >> $GITHUB_ENV
-          echo "THREADS=$(nproc)" >> $GITHUB_ENV
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          bc \
+          bison \
+          flex \
+          libssl-dev \
+          libelf-dev \
+          libncurses-dev \
+          zip \
+          ccache \
+          curl \
+          git \
+          wget \
+          cpio \
+          python3 \
+          python3-pip \
+          device-tree-compiler \
+          kmod \
+          u-boot-tools
 
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential bc bison flex libssl-dev libelf-dev libncurses-dev \
-            zip ccache curl git wget cpio python3 python3-pip \
-            device-tree-compiler kmod dwarves pahole
+    - name: Set up ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: libra-kernel-clang22
+        max-size: 5G
 
-      - name: Setup ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-        with:
-          key: libra-clang22-los19.1-localmatch-${{ runner.arch }}
-          max-size: 5G
+    - name: Download and setup Clang 22
+      run: |
+        mkdir -p $HOME/clang
+        cd $HOME/clang
+        
+        # Download Clang 22 from ZyCromerZ
+        wget https://github.com/ZyCromerZ/Clang/releases/download/22.0.0git-20250928-release/Clang-22.0.0git-20250928.tar.gz -O clang.tar.gz
+        tar -xzf clang.tar.gz
+        rm clang.tar.gz
+        
+        echo "CLANG_PATH=$HOME/clang/bin" >> $GITHUB_ENV
+        echo "$HOME/clang/bin" >> $GITHUB_PATH
 
-      - name: Download Clang 22.0.0git-20250928
-        run: |
-          mkdir -p $HOME/clang
-          cd $HOME/clang
-          wget -O clang.tar.gz \
-            https://github.com/ZyCromerZ/Clang/releases/download/22.0.0git-20250928-release/Clang-22.0.0git-20250928.tar.gz
-          tar -xzf clang.tar.gz --strip-components=1
-          rm clang.tar.gz
-          echo "CLANG_PATH=$HOME/clang/bin" >> $GITHUB_ENV
-          echo "$HOME/clang/bin" >> $GITHUB_PATH
+    - name: Download ARM64 GCC toolchain
+      run: |
+        mkdir -p $HOME/toolchains
+        cd $HOME/toolchains
+        
+        # Clone LineageOS ARM64 toolchain
+        git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 aarch64-linux-android-4.9
+        
+        echo "ARM64_TOOLCHAIN=$HOME/toolchains/aarch64-linux-android-4.9/bin/aarch64-linux-android-" >> $GITHUB_ENV
 
-      - name: Download ARM64 GCC 4.9 (LineageOS 19.1)
-        run: |
-          mkdir -p $HOME/toolchains/aarch64
-          cd $HOME/toolchains/aarch64
-          wget -O gcc.tar.gz \
-            https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9/archive/refs/heads/lineage-19.1.tar.gz
-          tar -xzf gcc.tar.gz --strip-components=1
-          rm gcc.tar.gz
-          echo "CROSS_COMPILE=$HOME/toolchains/aarch64/bin/aarch64-linux-android-" >> $GITHUB_ENV
+    - name: Download ARM32 GCC toolchain
+      run: |
+        cd $HOME/toolchains
+        
+        # Clone LineageOS ARM32 toolchain
+        git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 arm-linux-androideabi-4.9
+        
+        echo "ARM32_TOOLCHAIN=$HOME/toolchains/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-" >> $GITHUB_ENV
 
-      - name: Download ARM32 GCC 4.9 (LineageOS 19.1)
-        run: |
-          mkdir -p $HOME/toolchains/arm
-          cd $HOME/toolchains/arm
-          wget -O gcc.tar.gz \
-            https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9/archive/refs/heads/lineage-19.1.tar.gz
-          tar -xzf gcc.tar.gz --strip-components=1
-          rm gcc.tar.gz
-          echo "CROSS_COMPILE_ARM32=$HOME/toolchains/arm/bin/arm-linux-androideabi-" >> $GITHUB_ENV
+    - name: Clone Libra kernel source
+      run: |
+        git clone --depth=1 https://github.com/ximi-libra-test/android_kernel_xiaomi_libra -b personal ${{ env.KERNEL_DIR }}
 
-      - name: Clone Libra kernel source
-        run: |
-          git clone --depth=1 https://github.com/ximi-libra-test/android_kernel_xiaomi_libra.git  ${{ env.KERNEL_DIR }}
+    - name: Prepare build
+      working-directory: ${{ env.KERNEL_DIR }}
+      run: |
+        # Remove version check scripts if they exist
+        sed -i '/# Check for uncommitted changes\./,/fi/d' ./scripts/setlocalversion 2>/dev/null || true
+        
+        # Create output directory
+        mkdir -p ${{ env.OUT_DIR }}
 
-      - name: Prepare out directory
-        working-directory: ${{ env.KERNEL_DIR }}
-        run: |
-          mkdir -p ${{ env.OUT_DIR }}
+    - name: Make defconfig
+      working-directory: ${{ env.KERNEL_DIR }}
+      run: |
+        make -j${{ env.THREADS }} \
+          LLVM_IAS=1 \
+          LLVM=1 \
+          ARCH=arm64 \
+          CLANG_TRIPLE=aarch64-linux-gnu- \
+          CROSS_COMPILE="${{ env.ARM64_TOOLCHAIN }}" \
+          CROSS_COMPILE_ARM32="${{ env.ARM32_TOOLCHAIN }}" \
+          CC="ccache clang" \
+          LD=ld.lld \
+          HOSTLD=ld.lld \
+          O="${{ env.OUT_DIR }}" \
+          libra_defconfig
 
-      - name: Merge config (exact match to local script)
-        working-directory: ${{ env.KERNEL_DIR }}
-        run: |
-          ARCH=arm64 scripts/kconfig/merge_config.sh -O ${{ env.OUT_DIR }} ${{ env.CONFIG_FILE }}
+    - name: Build kernel
+      working-directory: ${{ env.KERNEL_DIR }}
+      run: |
+        make -j${{ env.THREADS }} \
+          LLVM_IAS=1 \
+          LLVM=1 \
+          ARCH=arm64 \
+          CLANG_TRIPLE=aarch64-linux-gnu- \
+          CROSS_COMPILE="${{ env.ARM64_TOOLCHAIN }}" \
+          CROSS_COMPILE_ARM32="${{ env.ARM32_TOOLCHAIN }}" \
+          CC="ccache clang" \
+          LD=ld.lld \
+          HOSTLD=ld.lld \
+          O="${{ env.OUT_DIR }}"
 
-      - name: Build kernel (100% local script match)
-        working-directory: ${{ env.KERNEL_DIR }}
-        run: |
-          make -j${{ env.THREADS }} ARCH=arm64 SUBARCH=arm64 O=${{ env.OUT_DIR }} \
-            CC="ccache clang" \
-            AR="llvm-ar" \
-            NM="llvm-nm" \
-            LD="ld.lld" \
-            OBJCOPY="llvm-objcopy" \
-            OBJDUMP="llvm-objdump" \
-            STRIP="llvm-strip" \
-            CLANG_TRIPLE="aarch64-linux-gnu-" \
-            CROSS_COMPILE="${{ env.CROSS_COMPILE }}" \
-            CROSS_COMPILE_ARM32="${{ env.CROSS_COMPILE_ARM32 }}" \
-            CROSS_COMPILE_COMPAT="${{ env.CROSS_COMPILE_ARM32 }}" \
-            LLVM=1 \
-            LLVM_IAS=1 \
-            INSTALL_MOD_STRIP=1
+    - name: Check build output
+      run: |
+        if [ ! -f "${{ env.KERNEL_DIR }}/${{ env.OUT_DIR }}/arch/arm64/boot/Image.gz-dtb" ] && \
+           [ ! -f "${{ env.KERNEL_DIR }}/${{ env.OUT_DIR }}/arch/arm64/boot/Image" ]; then
+          echo "Error: Kernel Image not found!"
+          ls -la "${{ env.KERNEL_DIR }}/${{ env.OUT_DIR }}/arch/arm64/boot/" || true
+          exit 1
+        fi
+        echo "Build successful!"
+        ls -lh "${{ env.KERNEL_DIR }}/${{ env.OUT_DIR }}/arch/arm64/boot/"
 
-      - name: Show ccache stats
-        run: ccache -s
+    - name: Prepare kernel artifacts
+      run: |
+        mkdir -p artifacts
+        cd "${{ env.KERNEL_DIR }}/${{ env.OUT_DIR }}/arch/arm64/boot"
+        
+        # Copy kernel image (try both possible names)
+        if [ -f Image.gz-dtb ]; then
+          cp Image.gz-dtb ${{ github.workspace }}/artifacts/
+        elif [ -f Image ]; then
+          cp Image ${{ github.workspace }}/artifacts/
+        fi
+        
+        # Copy dtb if exists
+        if [ -f *.dtb ]; then
+          cp *.dtb ${{ github.workspace }}/artifacts/ 2>/dev/null || true
+        fi
+        
+        # List what we're uploading
+        ls -lh ${{ github.workspace }}/artifacts/
 
-      - name: Verify Image
-        run: |
-          if [ ! -f "${{ env.KERNEL_DIR }}/${{ env.OUT_DIR }}/arch/arm64/boot/Image.gz" ]; then
-            echo "Image.gz not found!"
-            exit 1
-          fi
+    - name: Upload kernel artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: libra-kernel-clang22-${{ env.GIT_SHORT_SHA }}
+        path: artifacts/*
+        if-no-files-found: error
 
-      - name: Package kernel
-        run: |
-          cd ${{ env.KERNEL_DIR }}/${{ env.OUT_DIR }}
-          zip -r9 ${{ github.workspace }}/libra-kernel-clang22-${{ env.GIT_SHORT_SHA }}.zip \
-            arch/arm64/boot/Image.gz \
-            arch/arm64/boot/dts \
-            .config \
-            System.map \
-            vmlinux \
-            modules.builtin
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: libra-kernel-clang22-${{ env.GIT_SHORT_SHA }}
-          path: ${{ github.workspace }}/libra-kernel-clang22-${{ env.GIT_SHORT_SHA }}.zip
-          retention-days: 7
+    - name: Create build info
+      run: |
+        cat > artifacts/build-info.txt << EOF
+        Kernel: Xiaomi Libra
+        Build Date: $(date)
+        Compiler: Clang 22.0.0git-20250928
+        Commit: ${{ github.sha }}
+        Branch: ${{ github.ref_name }}
+        EOF
+        
+    - name: Upload build info
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-info-${{ env.GIT_SHORT_SHA }}
+        path: artifacts/build-info.txt
