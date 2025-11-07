@@ -1,16 +1,6 @@
 name: Build Libra Kernel with Clang 22
 
 on:
-  push:
-    branches:
-      - main
-      - master
-      - personal
-  pull_request:
-    branches:
-      - main
-      - master
-      - personal
   workflow_dispatch:
 
 env:
