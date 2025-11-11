@@ -62,6 +62,7 @@ jobs:
             ak3_suffix: "_RKSU"
           - type: SukiSU
             ksu: true
+            exclude: sufsless
             repo: "SukiSU-Ultra/SukiSU-Ultra"
             folder: "KernelSU"
             branch: "main"
