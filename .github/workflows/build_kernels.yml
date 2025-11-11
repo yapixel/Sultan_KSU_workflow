@@ -65,7 +65,7 @@ jobs:
             ak3_suffix: "_RKSU"
           - type: SukiSU
             ksu: true
-            exclude: sufsless
+            exclude: susfsless
             repo: "SukiSU-Ultra/SukiSU-Ultra"
             folder: "KernelSU"
             branch: "nongki"
