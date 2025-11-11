@@ -18,6 +18,14 @@ jobs:
       fail-fast: false
       matrix:
         susfs: [false, true]
+        kernel:
+          - codename: zuma
+            repo: "android_kernel_google_zuma"
+            android_version: "android14"
+            kernel_version: "6.1"
+            defconfig: zuma_defconfig
+            local_version: "-android14-11-g66e758f7d0c0-ab13748739"
+            build_date: "Tue Jul  8 09:17:32 UTC 2025"
         build:
 #          - type: Normal
 #            ksu: false
