@@ -9,9 +9,7 @@ on:
   workflow_dispatch:
   pull_request:
     types: [opened, synchronize, reopened, labeled]
-  push:
-    paths-ignore:
-      - 'README.md'
+  
 
 jobs:
   build:
