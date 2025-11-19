@@ -9,9 +9,7 @@ on:
   workflow_dispatch:
   pull_request:
     types: [opened, synchronize, reopened, labeled]
-  push:
-    paths-ignore:
-      - 'README.md'
+  
 
 jobs:
   build:
@@ -197,10 +195,6 @@ jobs:
             done
           fi
 
-          # 所有变体都需要应用的 sys.c fix
-          echo "🔧 Applying sys.c fix patch for all variants..."
-          patch -p1 --fuzz=3 < "${{ env.james_dir }}/sultan/sys.c_fix.patch" || true
-
       - name: Add KernelSU
         if: matrix.build.ksu
         run: |
@@ -290,6 +284,13 @@ jobs:
             rm -f fs/proc/base.c.rej fs/proc/base.c.orig 2>/dev/null || true
             rm -f "$PATCH_FILE"
           fi
+
+      - name: Apply Final sys.c Fix Patch
+        run: |
+          cd "${{ env.kernel_dir }}"
+          # 在所有补丁应用完成后，最后应用 sys.c fix
+          echo "🔧 Applying final sys.c fix patch after all other patches..."
+          patch -p1 --fuzz=3 < "${{ env.james_dir }}/sultan/sys.c_fix.patch" || true
 
       - name: Setup Kernel Configs
         run: |
