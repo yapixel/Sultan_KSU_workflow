@@ -1,0 +1,457 @@
+name: Sultan Test
+
+permissions:
+  contents: write
+  actions: write
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  push:
+    paths-ignore:
+      - 'README.md'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    if: >
+      ${{ 
+        github.event_name != 'pull_request' ||
+        contains(github.event.pull_request.labels.*.name, 'build')
+      }}
+    name: >-
+      ${{ matrix.kernel.codename }}-
+      ${{ matrix.build.type }}${{ matrix.susfs && '_SUSFS' || '' }}
+    outputs:
+      release_tag: ${{ steps.tag.outputs.tag }}
+    strategy:
+      fail-fast: false
+      matrix:
+        kernel:
+          - codename: zuma
+            repo: "android_kernel_google_zuma"
+            android_version: "android14"
+            kernel_version: "6.1"
+            sub_level: "134"
+            defconfig: zuma_defconfig
+            local_version: "-android14-11-g66e758f7d0c0-ab13748739"
+            build_date: "Tue Jul 8 09:17:32 UTC 2025"
+        build:
+          - type: SukiSU
+            name: "SukiSU"
+            ksu: true
+            repo: "SukiSU-Ultra/SukiSU-Ultra"
+            folder: "KernelSU"
+            branch: "main"
+            susfs_repo: "SukiSU-Ultra/SukiSU-Ultra"
+            susfs_branch: "susfs-main"
+            kernel_patches: "sultan/scope-min-hooks-v1.6.patch"
+            extra_configs: |
+              CONFIG_KSU_SUSFS=y
+              CONFIG_KSU_MANUAL_SU=n
+              CONFIG_COMPAT=y
+              CONFIG_ZRAM_GS_WRITEBACK=y
+            ak3_suffix: "_SukiSU"
+            
+          - type: MKSU
+            name: "MKSU"
+            ksu: true
+            repo: "5ec1cff/KernelSU"
+            folder: "KernelSU"
+            branch: "main"
+            ksu_kernel_patches: "mksu/0001-50_add_susfs_to_kernelside_5ec1cff.patch"
+            mksu_patches: "mksu/0001-10_enable_susfs_for_ksu_5ec1cff.patch"
+            ak3_suffix: "_MKSU"
+            extra_configs: |
+              CONFIG_KSU_EXTRAS=y
+              CONFIG_KSU_KRETPROBES_SUCOMPAT=y
+              CONFIG_KSU_THRONE_TRACKER_ALWAYS_THREADED=y
+            
+          - type: KowSU
+            name: "KowSU"
+            ksu: true
+            repo: "KOWX712/KernelSU"
+            folder: "KernelSU"
+            branch: "master"
+            ksu_kernel_patches: "kowsu/0001-50_add_susfs_to_kernelside_KOWX712.patch"
+            kowsu_patches: "kowsu/0001-10-add_SuSFS_to_KernelSU_KOWX712.patch"
+            ak3_suffix: "_KowSU"
+            extra_configs: |
+              CONFIG_KSU_EXTRAS=y
+              CONFIG_KSU_KRETPROBES_SUCOMPAT=y
+              CONFIG_KSU_THRONE_TRACKER_ALWAYS_THREADED=y
+            
+          - type: xxKSU
+            name: "xxKSU"
+            ksu: true
+            repo: "backslashxx/KernelSU"
+            folder: "KernelSU"
+            branch: "master"
+            kernel_patches: "sultan/scope-min-hooks-v1.6.patch"
+            ak3_suffix: "_xxKSU"
+            extra_configs: |
+              CONFIG_KSU_EXTRAS=y
+              CONFIG_KSU_KRETPROBES_SUCOMPAT=y
+              CONFIG_KSU_THRONE_TRACKER_ALWAYS_THREADED=y
+        
+        susfs: [false, true]
+        
+        # 使用 exclude 排除不需要的组合（与GKI一致）
+        exclude:
+          # 排除 SukiSU 没有 SUSFS 的情况
+          - build:
+              type: SukiSU
+            susfs: false
+          
+          # 排除 MKSU 没有 SUSFS 的情况
+          - build:
+              type: MKSU
+            susfs: false
+          
+          # 排除 KowSU 没有 SUSFS 的情况
+          - build:
+              type: KowSU
+            susfs: false
+          
+          # 排除 xxKSU 有 SUSFS 的情况
+          - build:
+              type: xxKSU
+            susfs: true
+
+    steps:
+      - name: Download and extract GCC 14.2.0 toolchain
+        run: |
+          echo "Downloading GCC 14.2.0..."
+          wget -q https://kernel.org/pub/tools/crosstool/files/bin/x86_64/14.2.0/x86_64-gcc-14.2.0-nolibc-aarch64-linux.tar.gz -O gcc.tar.gz
+          gunzip gcc.tar.gz
+          tar -xf gcc.tar
+          echo "GCC 14.2.0 ready"
+
+      - name: Clone Dependencies and Set ENV
+        run: |
+          ANYKERNEL_BRANCH="sultan-${{ matrix.kernel.codename }}"
+          SUSFS_BRANCH="gki-${{ matrix.kernel.android_version }}-${{ matrix.kernel.kernel_version }}"
+
+          sudo apt-get update && sudo apt-get install -y ccache
+          ccache --max-size=2G
+          ccache --set-config=compression=true
+          echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
+
+          git clone --depth=1 https://github.com/TheWildJames/AnyKernel3.git -b "$ANYKERNEL_BRANCH" AK3
+          echo "ak3_dir=$PWD/AK3" >> $GITHUB_ENV
+
+          git clone --depth=5 https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH" susfs
+          echo "susfs_dir=$PWD/susfs" >> $GITHUB_ENV
+
+          git clone --depth=1 https://github.com/TheWildJames/kernel_patches.git james_patches
+          echo "james_dir=$PWD/james_patches" >> $GITHUB_ENV
+
+          git clone --depth=1 https://github.com/TheSillyOk/kernel_ls_patches ok_patches
+          echo "ok_dir=$PWD/ok_patches" >> $GITHUB_ENV
+
+          git clone --depth=1 https://github.com/yapixel/kernel_patches yapixel_patches
+          echo "yapixel_dir=$PWD/yapixel_patches" >> $GITHUB_ENV
+
+          git clone --depth=1 https://github.com/kerneltoast/${{ matrix.kernel.repo }} sultan
+          echo "kernel_dir=$PWD/sultan" >> $GITHUB_ENV
+
+          # === CLONE SH SCRIPTS ONCE ===
+          git clone --depth=1 https://github.com/TheSillyOk/sh sh
+
+          # === GET KSU VARIANT & VERSION ===
+          KSU_VARIANT="${{ matrix.build.type }}"
+          KSU_VER="unknown"
+
+          case "$KSU_VARIANT" in
+            "SukiSU")
+              KSU_VER=$(./sh/extract_ksuver.sh "https://github.com/SukiSU-Ultra/SukiSU-Ultra" "kernel/Makefile" "." "susfs-main" || echo "unknown")
+              ;;
+            "xxKSU")
+              KSU_VER=$(./sh/extract_ksuver.sh "https://github.com/backslashxx/KernelSU" "kernel/Makefile" "." "master"|| echo "unknown")
+              ;;
+            "KowSU")
+              KSU_VER=$(./sh/get_ksuver.sh "KOWX712" "KernelSU" "master" || echo "unknown")
+              ;;
+            "MKSU")
+              KSU_VER=$(./sh/get_ksuver.sh "5ec1cff" "KernelSU" "main" || echo "unknown")
+              ;;
+          esac
+
+          echo "KSU_VARIANT=$KSU_VARIANT" >> $GITHUB_ENV
+          echo "KSU_VER=$KSU_VER" >> $GITHUB_ENV
+
+          # === FINAL ZIP NAME ===
+          ZIP_NAME="Sultan-${{ matrix.kernel.kernel_version }}.${{ matrix.kernel.sub_level }}-${KSU_VARIANT}-r${KSU_VER}${{ matrix.susfs && '-SUSFS' || '' }}.zip"
+          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
+
+      - name: Apply Kernel Patches
+        run: |
+          cd "${{ env.kernel_dir }}"
+
+          # Apply general kernel patches
+          if [[ -n "${{ matrix.build.kernel_patches }}" ]]; then
+            for p in ${{ matrix.build.kernel_patches }}; do
+              patch -p1 -F 3 < "${{ env.ok_dir }}/$p" && echo "Applied kernel patch: $p"
+            done
+          fi
+
+          # 所有变体都需要应用的 sys.c fix
+          echo "🔧 Applying sys.c fix patch for all variants..."
+          patch -p1 --fuzz=3 < "${{ env.james_dir }}/sultan/sys.c_fix.patch" || true
+
+      - name: Add KernelSU
+        if: matrix.build.ksu
+        run: |
+          cd "${{ env.kernel_dir }}"
+
+          REPO="${{ matrix.build.susfs_repo || matrix.build.repo }}"
+          BRANCH="${{ matrix.build.susfs_branch || matrix.build.branch }}"
+
+          echo "Using latest from branch: $BRANCH (from $REPO)"
+          curl -fsSL "https://raw.githubusercontent.com/$REPO/$BRANCH/kernel/setup.sh" | \
+            bash -s -- "$BRANCH"
+
+      - name: Apply KSU Variant Patches to KernelSU Directory
+        if: matrix.build.ksu
+        run: |
+          cd "${{ env.kernel_dir }}/KernelSU"
+          
+          echo "=== Applying KSU variant patches to KernelSU directory ==="
+          
+          # KowSU KSU目录级别补丁
+          if [[ "${{ matrix.build.type }}" == "KowSU" && -n "${{ matrix.build.kowsu_patches }}" ]]; then
+            echo "🔧 Applying KowSU KSU-directory patches..."
+            for patch in ${{ matrix.build.kowsu_patches }}; do
+              echo "Applying KSU patch: $patch"
+              cp "${{ env.yapixel_dir }}/$patch" ./
+              patch -p1 < "$(basename "$patch")" || true
+              rm -f "$(basename "$patch")"
+            done
+          fi
+
+          # MKSU KSU目录级别补丁
+          if [[ "${{ matrix.build.type }}" == "MKSU" && -n "${{ matrix.build.mksu_patches }}" ]]; then
+            echo "🔧 Applying MKSU KSU-directory patches..."
+            for patch in ${{ matrix.build.mksu_patches }}; do
+              echo "Applying KSU patch: $patch"
+              cp "${{ env.yapixel_dir }}/$patch" ./
+              patch -p1 < "$(basename "$patch")" || true
+              rm -f "$(basename "$patch")"
+            done
+          fi
+
+      - name: Apply SUSFS Patches for KernelSU Variants
+        if: matrix.susfs
+        run: |
+          cd "${{ env.kernel_dir }}"
+          
+          echo "=== Applying SUSFS patches for ${{ matrix.build.type }} ==="
+          
+          # 复制 SUSFS 文件
+          echo "Copying SUSFS files..."
+          cp -r "${{ env.susfs_dir }}/kernel_patches/fs/"* fs/ 2>/dev/null || true
+          cp -r "${{ env.susfs_dir }}/kernel_patches/include/linux/"* include/linux/ 2>/dev/null || true
+
+          # KowSU 内核级别 SUSFS 补丁
+          if [[ "${{ matrix.build.type }}" == "KowSU" && -n "${{ matrix.build.ksu_kernel_patches }}" ]]; then
+            echo "🔧 Applying KowSU kernel SUSFS patches..."
+            for p in ${{ matrix.build.ksu_kernel_patches }}; do
+              echo "Applying kernel patch: $p"
+              cp "${{ env.yapixel_dir }}/$p" ./
+              patch --fuzz=10 -p1 < "$(basename "$p")" || true
+              # 清理可能的冲突文件
+              rm -f fs/proc/base.c.rej fs/proc/base.c.orig 2>/dev/null || true
+              rm -f "$(basename "$p")"
+            done
+          fi
+
+          # MKSU 内核级别 SUSFS 补丁
+          if [[ "${{ matrix.build.type }}" == "MKSU" && -n "${{ matrix.build.ksu_kernel_patches }}" ]]; then
+            echo "🔧 Applying MKSU kernel SUSFS patches..."
+            for p in ${{ matrix.build.ksu_kernel_patches }}; do
+              echo "Applying kernel patch: $p"
+              cp "${{ env.yapixel_dir }}/$p" ./
+              patch --fuzz=10 -p1 < "$(basename "$p")" || true
+              # 清理可能的冲突文件
+              rm -f fs/proc/base.c.rej fs/proc/base.c.orig 2>/dev/null || true
+              rm -f "$(basename "$p")"
+            done
+          fi
+
+          # SukiSU 使用标准的 SUSFS 补丁
+          if [[ "${{ matrix.build.type }}" == "SukiSU" ]]; then
+            echo "🔧 Applying standard SUSFS main patch for SukiSU..."
+            PATCH_FILE="50_add_susfs_in_gki-${{ matrix.kernel.android_version }}-${{ matrix.kernel.kernel_version }}.patch"
+            cp "${{ env.susfs_dir }}/kernel_patches/$PATCH_FILE" "./$PATCH_FILE"
+            patch --fuzz=10 -p1 < "$PATCH_FILE" || true
+            # 清理可能的冲突文件
+            rm -f fs/proc/base.c.rej fs/proc/base.c.orig 2>/dev/null || true
+            rm -f "$PATCH_FILE"
+          fi
+
+      - name: Setup Kernel Configs
+        run: |
+          cd "${{ env.kernel_dir }}"
+
+          # Base configs
+          configs="CONFIG_TMPFS_XATTR=y CONFIG_TMPFS_POSIX_ACL=y CONFIG_IP_NF_TARGET_TTL=y CONFIG_IP6_NF_TARGET_HL=y CONFIG_IP6_NF_MATCH_HL=y CONFIG_TCP_CONG_ADVANCED=y CONFIG_TCP_CONG_BBR=y CONFIG_NET_SCH_FQ=y CONFIG_TCP_CONG_BIC=n CONFIG_TCP_CONG_WESTWOOD=n CONFIG_TCP_CONG_HTCP=n CONFIG_DEFAULT_BBR=y CONFIG_BPF_STREAM_PARSER=y CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y CONFIG_NETFILTER_XT_SET=y CONFIG_IP_SET=y CONFIG_IP_SET_MAX=65534 CONFIG_IP_SET_BITMAP_IP=y CONFIG_IP_SET_BITMAP_IPMAC=y CONFIG_IP_SET_BITMAP_PORT=y CONFIG_IP_SET_HASH_IP=y CONFIG_IP_SET_HASH_IPMARK=y CONFIG_IP_SET_HASH_IPPORT=y CONFIG_IP_SET_HASH_IPPORTIP=y CONFIG_IP_SET_HASH_IPPORTNET=y CONFIG_IP_SET_HASH_IPMAC=y CONFIG_IP_SET_HASH_MAC=y CONFIG_IP_SET_HASH_NETPORTNET=y CONFIG_IP_SET_HASH_NET=y CONFIG_IP_SET_HASH_NETNET=y CONFIG_IP_SET_HASH_NETPORT=y CONFIG_IP_SET_HASH_NETIFACE=y CONFIG_IP_SET_LIST_SET=y CONFIG_IP6_NF_NAT=y CONFIG_IP6_NF_TARGET_MASQUERADE=y CONFIG_KSU=y"
+          
+          # 添加变体特定的配置
+          echo '${{ matrix.build.extra_configs }}' | tr '|' '\n' >> temp_configs.txt
+          while IFS= read -r line; do
+            if [[ -n "$line" ]]; then
+              configs="$configs $line"
+            fi
+          done < temp_configs.txt
+          rm -f temp_configs.txt
+
+          # SUSFS 配置
+          if [[ "${{ matrix.susfs }}" == "true" ]]; then
+            configs="$configs CONFIG_SUSFS=y CONFIG_KSU_SUSFS=y CONFIG_KSU_SUSFS_SUS_PATH=y CONFIG_KSU_SUSFS_SUS_MOUNT=y CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y CONFIG_KSU_SUSFS_SPOOF_UNAME=y CONFIG_KSU_SUSFS_ENABLE_LOG=y CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y"
+          fi
+
+          # 应用所有配置
+          for config in $configs; do
+            name=$(echo "$config" | cut -d'=' -f1)
+            sed -i -E "s/.*($name=.*)/# \1 is not set/gi" arch/arm64/configs/${{ matrix.kernel.defconfig }}
+            echo "$config" >> arch/arm64/configs/${{ matrix.kernel.defconfig }}
+          done
+
+          # 设置版本信息
+          sed -i 's/${LOCALVERSION+set}/set/' scripts/setlocalversion
+          sed -i 's/CONFIG_LOCALVERSION="-Sultan"/CONFIG_LOCALVERSION="${{ matrix.kernel.local_version }}"/' arch/arm64/configs/${{ matrix.kernel.defconfig }}
+          perl -pi -e 's/build-timestamp = \$\(or \$\(KBUILD_BUILD_TIMESTAMP\), \$\(build-timestamp-auto\)\)/build-timestamp = "${{ matrix.kernel.build_date }}"/' init/Makefile
+
+      - name: Cache Kernel Build
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: sultan-${{ matrix.kernel.codename }}-${{ matrix.build.type }}-susfs${{ matrix.susfs }}-ccache-${{ github.sha }}
+          restore-keys: |
+            sultan-${{ matrix.kernel.codename }}-${{ matrix.build.type }}-susfs${{ matrix.susfs }}-ccache-
+
+      - name: Build Kernel
+        run: |
+          cd "${{ env.kernel_dir }}"
+          export KBUILD_BUILD_USER="build-user"
+          export KBUILD_BUILD_HOST="build-host"
+          make O=out CROSS_COMPILE=$GITHUB_WORKSPACE/gcc-14.2.0-nolibc/aarch64-linux/bin/aarch64-linux- CC=$GITHUB_WORKSPACE/gcc-14.2.0-nolibc/aarch64-linux/bin/aarch64-linux-gcc ${{ matrix.kernel.defconfig }}
+          make O=out CROSS_COMPILE="ccache $GITHUB_WORKSPACE/gcc-14.2.0-nolibc/aarch64-linux/bin/aarch64-linux-" CC="ccache $GITHUB_WORKSPACE/gcc-14.2.0-nolibc/aarch64-linux/bin/aarch64-linux-gcc" -j$(nproc --all)
+
+      - name: Package AnyKernel3
+        run: |
+          cp "${{ env.kernel_dir }}/out/arch/arm64/boot/Image.lz4" "${{ env.ak3_dir }}/Image.lz4"
+          cat "${{ env.kernel_dir }}/out/google-devices/${{ matrix.kernel.codename }}/dts/"*.dtb \
+              > "${{ env.ak3_dir }}/dtb"
+
+          cd "${{ env.ak3_dir }}"
+          zip -r9 "${GITHUB_WORKSPACE}/${{ env.ZIP_NAME }}" . -x "*.git*" "README.md" "placeholder"
+          cd "${GITHUB_WORKSPACE}"
+
+          sha256sum "${{ env.ZIP_NAME }}" > "${{ env.ZIP_NAME }}.sha256"
+          echo "ZIP_FULLPATH=${GITHUB_WORKSPACE}/${{ env.ZIP_NAME }}" >> "$GITHUB_ENV"
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-${{ matrix.build.type }}${{ matrix.susfs && '-SUSFS' || '' }}
+          path: |
+            ${{ env.ZIP_FULLPATH }}
+            ${{ env.ZIP_FULLPATH }}.sha256
+
+      - name: Create Daily Release Tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BASE_TAG=$(date +"%Y/%m/%d")
+          LATEST=$(gh api "repos/${{ github.repository }}/tags" --jq '.[0].name' 2>/dev/null || echo "")
+
+          if [[ -n "$LATEST" && "$LATEST" == "$BASE_TAG"* ]]; then
+            REV=$(echo "$LATEST" | grep -o 'r[0-9]*$' | sed 's/^r//' || echo "0")
+            REV=$((REV + 1))
+            TAG="${BASE_TAG}-r${REV}"
+          else
+            TAG="${BASE_TAG}-r1"
+          fi
+
+          gh api -X DELETE "/repos/${{ github.repository }}/git/refs/tags/$TAG" > /dev/null 2>&1 || true
+          gh api -X POST "/repos/${{ github.repository }}/git/refs" \
+            -f ref="refs/tags/$TAG" \
+            -f sha="${{ github.sha }}" || exit 1
+
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "RELEASE_TAG=$TAG" >> $GITHUB_ENV
+
+  release:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Set Release Info
+        id: info
+        run: |
+          echo "date=$(date +"%d/%m/%Y")" >> $GITHUB_ENV
+          git clone --depth=1 https://github.com/TheSillyOk/sh sh
+          echo "sh_dir=$PWD/sh" >> $GITHUB_ENV
+
+          SUKI_URL=$(git ls-remote https://github.com/SukiSU-Ultra/SukiSU-Ultra main | awk '{print "https://github.com/SukiSU-Ultra/SukiSU-Ultra/commit/"$1}')
+          XXKSU_URL=$(git ls-remote https://github.com/backslashxx/KernelSU master | awk '{print "https://github.com/backslashxx/KernelSU/commit/"$1}')
+          KOWSU_URL=$(git ls-remote https://github.com/KOWX712/KernelSU master | awk '{print "https://github.com/KOWX712/KernelSU/commit/"$1}')
+          MKSU_URL=$(git ls-remote https://github.com/5ec1cff/KernelSU main | awk '{print "https://github.com/5ec1cff/KernelSU/commit/"$1}')
+
+          SUKI_V=$(./sh/extract_ksuver.sh "https://github.com/SukiSU-Ultra/SukiSU-Ultra" "kernel/Makefile" "." "main" || echo "unknown")
+          XXKSU_V=$(./sh/extract_ksuver.sh "https://github.com/backslashxx/KernelSU" "kernel/Makefile" "." "master" || echo "unknown")
+          KOWSU_V=$(./sh/get_ksuver.sh "KOWX712" "KernelSU" "master")
+          MKSU_V=$(./sh/get_ksuver.sh "5ec1cff" "KernelSU" "main")
+
+          echo "SUKI_URL=$SUKI_URL" >> $GITHUB_ENV
+          echo "XXKSU_URL=$XXKSU_URL" >> $GITHUB_ENV
+          echo "KOWSU_URL=$KOWSU_URL" >> $GITHUB_ENV
+          echo "MKSU_URL=$MKSU_URL" >> $GITHUB_ENV
+          echo "SUKI_V=$SUKI_V" >> $GITHUB_ENV
+          echo "XXKSU_V=$XXKSU_V" >> $GITHUB_ENV
+          echo "KOWSU_V=$KOWSU_V" >> $GITHUB_ENV
+          echo "MKSU_V=$MKSU_V" >> $GITHUB_ENV
+
+      - name: Generate Release Body
+        id: release_body
+        run: |
+          cat << EOF > release_body.md
+          ⚠️ **COMPATIBILITY NOTICE** ⚠️
+          Please ensure compatibility by comparing release dates with official Sultan kernel releases
+          
+          Module:
+          -> https://github.com/sidex15/ksu_module_susfs
+          
+          Managers:
+          -> https://github.com/5ec1cff/KernelSU
+          -> https://github.com/backslashxx/KernelSU
+          -> https://github.com/KOWX712/KernelSU
+          -> https://github.com/SukiSU-Ultra/SukiSU-Ultra
+          
+          Features:
+          [+] KowSU [${{ env.KOWSU_V }}](${{ env.KOWSU_URL }})
+          [+] SukiSU [${{ env.SUKI_V }}](${{ env.SUKI_URL }})
+          [+] xxKSU [${{ env.XXKSU_V }}](${{ env.XXKSU_URL }})
+          [+] MKSU  [${{ env.MKSU_V }}](${{ env.MKSU_URL }})
+          [+] SUSFS v2.0.0
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.build.outputs.release_tag }}
+          name: Sultan Kernel - ${{ env.date }}
+          body_path: release_body.md
+          files: ./artifacts/**/*.zip
+          fail_on_unmatched_files: true
