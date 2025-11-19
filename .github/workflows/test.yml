@@ -76,10 +76,10 @@ jobs:
             ksu_kernel_patches: "kowsu/0001-50_add_susfs_to_kernelside_KOWX712.patch"
             kowsu_patches: "kowsu/0001-10-add_SuSFS_to_KernelSU_KOWX712.patch"
             ak3_suffix: "_KowSU"
-            extra_configs: |
-              CONFIG_KSU_EXTRAS=y
-              CONFIG_KSU_KRETPROBES_SUCOMPAT=y
-              CONFIG_KSU_THRONE_TRACKER_ALWAYS_THREADED=y
+            #extra_configs: |
+            #  CONFIG_KSU_EXTRAS=y
+            #  CONFIG_KSU_KRETPROBES_SUCOMPAT=y
+            #  CONFIG_KSU_THRONE_TRACKER_ALWAYS_THREADED=y
             
           - type: xxKSU
             name: "xxKSU"
