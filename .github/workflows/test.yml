@@ -101,7 +101,7 @@ jobs:
           # 排除 SukiSU 没有 SUSFS 的情况
           - build:
               type: SukiSU
-            susfs: false
+            #susfs: false
           
           # 排除 MKSU 没有 SUSFS 的情况
           - build:
