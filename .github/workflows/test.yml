@@ -20,7 +20,7 @@ jobs:
         contains(github.event.pull_request.labels.*.name, 'build')
       }}
     name: >-
-      ${{ matrix.kernel.codename }}-
+      Sultan-
       ${{ matrix.build.type }}${{ matrix.susfs && '_SUSFS' || '' }}
     outputs:
       release_tag: ${{ steps.tag.outputs.tag }}
