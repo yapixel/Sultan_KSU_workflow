@@ -20,19 +20,15 @@ jobs:
       matrix:
         susfs: [false, true]
         build:
-#          - type: Normal
-#            ksu: false
-#            exclude: susfs
-#            ak3_suffix: ""
-#          - type: KSU
-#            ksu: true
-#            repo: "tiann/KernelSU"
-#            folder: "KernelSU"
-#            branch: "main"
-#            kernel_patches: "../james_patches/next/next_hooks.patch"
-#            extra_configs: "CONFIG_KPROBES=n"
-#            susfs_ksu_patches: "../susfs/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch"
-#            ak3_suffix: "_KSU"
+          - type: KSU
+            ksu: true
+            repo: "tiann/KernelSU"
+            folder: "KernelSU"
+            branch: "main"
+            #kernel_patches: "../james_patches/next/next_hooks.patch"
+            extra_configs: "CONFIG_KPROBES=n"
+            susfs_ksu_patches: "../susfs/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch"
+            ak3_suffix: "_KSU"
           - type: KSUN
             ksu: true
             repo: "KernelSU-Next/KernelSU-Next"
@@ -418,5 +414,3 @@ jobs:
          GH_TOKEN: ${{ github.token }}
         run: |
           bash ${{ env.sh_dir }}/upload-assets.sh "${{ env.TAG }}" "${{ env.repo_dir }}" "${{ env.artifacts_dir }}"
-
-          
