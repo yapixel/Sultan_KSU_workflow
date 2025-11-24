@@ -28,42 +28,18 @@ jobs:
             local_version: "-android14-11-g66e758f7d0c0-ab13748739"
             build_date: "Tue Jul  8 09:17:32 UTC 2025"
         build:
-#          - type: Normal
-#            ksu: false
-#            exclude: susfs
-#            ak3_suffix: ""
-#          - type: KSU
-#            ksu: true
-#            repo: "tiann/KernelSU"
-#            folder: "KernelSU"
-#            branch: "main"
-#            kernel_patches: "../james_patches/next/next_hooks.patch"
-#            extra_configs: "CONFIG_KPROBES=n"
-#            susfs_ksu_patches: "../susfs/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch"
-#            ak3_suffix: "_KSU"
-          - type: KSUN
+
+          - type: KSU
             ksu: true
-            repo: "KernelSU-Next/KernelSU-Next"
-            folder: "KernelSU-Next"
-            branch: "next"
-            exclude: susfs
-            susfs_repo: "pershoot/KernelSU-Next"
-            susfs_branch: "next-susfs"
-            ksu_patches: "KSUN/WildJames-Manager.patch"
-            kernel_patches: "../james_patches/sultan/syscall_hooks.patch"
-            extra_configs: "CONFIG_KSU_KPROBES_HOOK=n"
-            ak3_suffix: "_KSUNext"
-          - type: RKSU
-            ksu: true
-            repo: "rsuntk/KernelSU"
+            repo: "tiann/KernelSU"
             folder: "KernelSU"
             branch: "main"
-            susfs_branch: "susfs-main"
-            exclude: susfs
-            kernel_patches: ""
-            susfsless_kernel_patches: "../james_patches/sultan/syscall_hooks.patch sultan/reboot-hook.patch"
-            extra_configs: "CONFIG_KSU_MANUAL_HOOK=y"
-            ak3_suffix: "_RKSU"
+            exclude: susfsless
+            kernel_patches: "../james_patches/next/next_hooks.patch"
+            extra_configs: "CONFIG_KPROBES=n"
+            susfs_ksu_patches: "../susfs/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch"
+            ak3_suffix: "_KSU"
+          
           - type: SukiSU
             ksu: true
             repo: "SukiSU-Ultra/SukiSU-Ultra"
