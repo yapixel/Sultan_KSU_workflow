@@ -53,14 +53,6 @@ jobs:
             branch: "master"
             kernel_patches: "sultan/scope-min-hooks-v1.6.patch"
             ak3_suffix: "_xxKSU"
-          - type: xxKSU
-            ksu: true
-            ak3_suffix: "_xxKSU"
-            repo: "backslashxx/KernelSU"
-            folder: "KernelSU"
-            branch: "master"
-            kernel_patches: "sultan/scope-min-hooks-v1.6.patch"
-            extra_configs: ""
           - type: KowSU
             ksu: true
             ak3_suffix: "_KowSU"
