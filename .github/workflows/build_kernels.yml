@@ -1,3 +1,4 @@
+
 name: Sultan
 
 permissions:
@@ -17,14 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kernel:
-          - codename: zuma
-            repo: "android_kernel_google_zuma"
-            android_version: "android14"
-            kernel_version: "6.1"
-            defconfig: zuma_defconfig
-            local_version: "-android14-11-g66e758f7d0c0-ab13748739"
-            build_date: "Tue Jul  8 09:17:32 UTC 2025"
+        susfs: [false, true]
         build:
 #          - type: Normal
 #            ksu: false
@@ -44,6 +38,7 @@ jobs:
             repo: "KernelSU-Next/KernelSU-Next"
             folder: "KernelSU-Next"
             branch: "next"
+            exclude: susfs
             susfs_repo: "pershoot/KernelSU-Next"
             susfs_branch: "next-susfs"
             ksu_patches: "KSUN/WildJames-Manager.patch"
@@ -56,18 +51,19 @@ jobs:
             folder: "KernelSU"
             branch: "main"
             susfs_branch: "susfs-main"
-            kernel_patches: "../james_patches/sultan/syscall_hooks.patch" 
-            susfsless_kernel_patches: "sultan/reboot-hook.patch"
+            exclude: susfs
+            kernel_patches: ""
+            susfsless_kernel_patches: "../james_patches/sultan/syscall_hooks.patch sultan/reboot-hook.patch"
             extra_configs: "CONFIG_KSU_MANUAL_HOOK=y"
             ak3_suffix: "_RKSU"
           - type: SukiSU
             ksu: true
-            exclude: susfsless
             repo: "SukiSU-Ultra/SukiSU-Ultra"
             folder: "KernelSU"
-            branch: "main"
+            branch: "nongki"
             susfs_branch: "susfs-main"
-            kernel_patches: "sultan/scope-min-hooks-v1.6.patch"
+            exclude: susfsless
+            susfsless_kernel_patches: "../james_patches/sultan/syscall_hooks.patch sultan/reboot-hook.patch"
             extra_configs: "CONFIG_KSU_MANUAL_HOOK=y CONFIG_KSU_MANUAL_SU=n CONFIG_COMPAT=y CONFIG_ZRAM_GS_WRITEBACK=y"
             ak3_suffix: "_SukiSU"
             # kpm: "https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/refs/heads/main/kpm/patch_linux"
@@ -79,8 +75,14 @@ jobs:
             branch: "master"
             kernel_patches: "sultan/scope-min-hooks-v1.6.patch"
             ak3_suffix: "_xxKSU"
-
-        susfs: [false, true]
+        kernel:
+          - codename: zuma
+            repo: "android_kernel_google_zuma"
+            android_version: "android14"
+            kernel_version: "6.1"
+            defconfig: zuma_defconfig
+            local_version: "-android14-11-g66e758f7d0c0-ab13748739"
+            build_date: "Tue Jul  8 09:17:32 UTC 2025"
         exclude:
           - build:
               exclude: susfs
@@ -253,8 +255,8 @@ jobs:
         run: |
           cd "${{ env.kernel_dir }}"
 
-          export KBUILD_BUILD_USER="TheSillyOk"
-          export KBUILD_BUILD_HOST="Github"
+          export KBUILD_BUILD_USER="build-user"
+          export KBUILD_BUILD_HOST="build-host"
 
           make CROSS_COMPILE=$GITHUB_WORKSPACE/gcc-14.2.0-nolibc/aarch64-linux/bin/aarch64-linux- CC=$GITHUB_WORKSPACE/gcc-14.2.0-nolibc/aarch64-linux/bin/aarch64-linux-gcc -j$(nproc --all) ${{ matrix.kernel.defconfig }}
           make CROSS_COMPILE="ccache $GITHUB_WORKSPACE/gcc-14.2.0-nolibc/aarch64-linux/bin/aarch64-linux-" CC="ccache $GITHUB_WORKSPACE/gcc-14.2.0-nolibc/aarch64-linux/bin/aarch64-linux-gcc" -j$(nproc --all)
@@ -374,7 +376,7 @@ jobs:
           [+] RKSU [${{ env.RKSU_V }}](${{ env.RKSU_URL }})
           [+] SukiSU [${{ env.SUKI_V }}](${{ env.SUKI_URL }})
           [+] xxKSU [${{ env.xxKSU_V }}](${{ env.xxKSU_URL }})
-          [+] SUSFS v1.5.12
+          [+] SUSFS v2.0.0
           EOF
 
       - name: Set release tag
@@ -416,3 +418,5 @@ jobs:
          GH_TOKEN: ${{ github.token }}
         run: |
           bash ${{ env.sh_dir }}/upload-assets.sh "${{ env.TAG }}" "${{ env.repo_dir }}" "${{ env.artifacts_dir }}"
+
+          
