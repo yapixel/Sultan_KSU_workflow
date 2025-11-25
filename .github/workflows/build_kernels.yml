@@ -76,7 +76,7 @@ jobs:
           - build:
               exclude: susfsless
             susfs: false
-          - variant:
+          - build:
               type: MKSU
             susfs: true
 
