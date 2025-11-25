@@ -29,16 +29,16 @@ jobs:
             build_date: "Tue Jul  8 09:17:32 UTC 2025"
         build:
 
-          - type: KSU
-            ksu: true
-            repo: "tiann/KernelSU"
-            folder: "KernelSU"
-            branch: "main"
-            exclude: susfsless
-            kernel_patches: "../james_patches/next/next_hooks.patch"
-            extra_configs: "CONFIG_KPROBES=n"
-            susfs_ksu_patches: "../susfs/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch"
-            ak3_suffix: "_KSU"
+         # - type: KSU
+         #   ksu: true
+         #   repo: "tiann/KernelSU"
+         #   folder: "KernelSU"
+         #   branch: "main"
+         #   exclude: susfsless
+         #   kernel_patches: "../james_patches/next/next_hooks.patch"
+         #   extra_configs: "CONFIG_KPROBES=n"
+         #   susfs_ksu_patches: "../susfs/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch"
+         #   ak3_suffix: "_KSU"
           
           - type: SukiSU
             ksu: true
@@ -51,6 +51,16 @@ jobs:
             extra_configs: "CONFIG_KSU_MANUAL_HOOK=y CONFIG_KSU_MANUAL_SU=n CONFIG_COMPAT=y CONFIG_ZRAM_GS_WRITEBACK=y"
             ak3_suffix: "_SukiSU"
             # kpm: "https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/refs/heads/main/kpm/patch_linux"
+
+          - type: MKSU
+            ksu: true
+            ak3_suffix: "_MKSU"
+            repo: "5ec1cff/KernelSU"
+            folder: "KernelSU"
+            branch: "main"
+            kernel_patches: "sultan/scope-min-hooks-v1.6.patch"
+            extra_configs: ""
+          
           - type: xxKSU
             ksu: true
             exclude: susfs
