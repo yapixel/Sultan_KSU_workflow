@@ -76,6 +76,9 @@ jobs:
           - build:
               exclude: susfsless
             susfs: false
+          - variant:
+              type: MKSU
+            susfs: true
 
     steps:
       - name: Download and extract GCC 14.2.0 toolchain
