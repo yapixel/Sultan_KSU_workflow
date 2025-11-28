@@ -139,7 +139,7 @@ jobs:
               KSU_VER=$(./sh/get_ksuver.sh "KOWX712" "KernelSU" "master" || echo "unknown")
               ;;
             "MKSU")
-              KSU_VER=$(./sh/get.sh "5ec1cff" "KernelSU" "main" || echo "unknown")
+              KSU_VER=$(./sh/get_ksuver.sh "5ec1cff" "KernelSU" "main" || echo "unknown")
               ;;
           esac
 
