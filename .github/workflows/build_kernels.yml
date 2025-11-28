@@ -290,8 +290,8 @@ jobs:
 
           SUKI_V=$(./sh/extract_ksuver.sh "https://github.com/SukiSU-Ultra/SukiSU-Ultra" "kernel/Makefile" "." "main" || echo "unknown")
           XXKSU_V=$(./sh/extract_ksuver.sh "https://github.com/backslashxx/KernelSU" "kernel/Makefile" "." "master" || echo "unknown")
-          KOWSU_V=$(./sh/extract_ksuver.sh "https://github.com/KOWX712/KernelSU" "kernel/Makefile" "." "master" || echo "unknown")
-          MKSU_V=$(./sh/extract_ksuver.sh "https://github.com/5ec1cff/KernelSU" "kernel/Makefile" "." "main" || echo "unknown")
+          KOWSU_V=$(./sh/get_ksuver.sh "KOWX712" "KernelSU" "master" || echo "unknown")
+          MKSU_V=$(./sh/get_ksuver.sh "5ec1cff" "KernelSU" "main" || echo "unknown")
 
           echo "SUKI_URL=$SUKI_URL" >> $GITHUB_ENV
           echo "XXKSU_URL=$XXKSU_URL" >> $GITHUB_ENV
