@@ -85,7 +85,7 @@ jobs:
             susfs: true
           - variant:
               type: SukiSU
-            susfs: false
+            
 
     steps:
       - name: Download and extract GCC 14.2.0 toolchain
