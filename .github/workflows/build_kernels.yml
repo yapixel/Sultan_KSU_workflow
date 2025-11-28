@@ -148,7 +148,7 @@ jobs:
 
           # === FINAL ZIP NAME ===
           DATE=$(date +"%-d.%-m.%Y")  # e.g., 5.11.2025
-          ZIP_NAME="${DATE}-${{ matrix.kernel.codename }}_A16_Sultan-${KSU_VARIANT}-${KSU_VER}.zip"
+          ZIP_NAME="Sultan-6.1.134-${KSU_VARIANT}-$r{KSU_VER}.zip"
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
 
       - name: Setup Kernel Configs
