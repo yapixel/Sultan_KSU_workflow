@@ -239,8 +239,8 @@ jobs:
           cd "${{ env.kernel_dir }}"
           export KBUILD_BUILD_USER="build-user"
           export KBUILD_BUILD_HOST="build-host"
-          make O=out CROSS_COMPILE=$GITHUB_WORKSPACE/gcc-14.2.0-nolibc/aarch64-linux/bin/aarch64-linux- CC=$GITHUB_WORKSPACE/gcc-14.2.0-nolibc/aarch64-linux/bin/aarch64-linux-gcc ${{ matrix.kernel.defconfig }}
-          make O=out CROSS_COMPILE="ccache $GITHUB_WORKSPACE/gcc-14.2.0-nolibc/aarch64-linux/bin/aarch64-linux-" CC="ccache $GITHUB_WORKSPACE/gcc-14.2.0-nolibc/aarch64-linux/bin/aarch64-linux-gcc" -j$(nproc --all)
+          make O=out CROSS_COMPILE=$GITHUB_WORKSPACE/gcc-13.3.0-nolibc/aarch64-linux/bin/aarch64-linux- CC=$GITHUB_WORKSPACE/gcc-13.3.0-nolibc/aarch64-linux/bin/aarch64-linux-gcc ${{ matrix.kernel.defconfig }}
+          make O=out CROSS_COMPILE="ccache $GITHUB_WORKSPACE/gcc-13.3.0-nolibc/aarch64-linux/bin/aarch64-linux-" CC="ccache $GITHUB_WORKSPACE/gcc-13.3.0-nolibc/aarch64-linux/bin/aarch64-linux-gcc" -j$(nproc --all)
 
       - name: Package AnyKernel3
         run: |
