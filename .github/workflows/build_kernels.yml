@@ -26,11 +26,11 @@ jobs:
       fail-fast: false
       matrix:
         kernel:
-          - codename: zuma
-            repo: "android_kernel_google_zuma"
+          - codename: zumapro
+            repo: "android_kernel_google_zumapro"
             android_version: "android14"
             kernel_version: "6.1"
-            defconfig: zuma_defconfig
+            defconfig: zumapro_defconfig
             local_version: "-android14-11-g66e758f7d0c0-ab13748739"
             build_date: "Tue Jul 8 09:17:32 UTC 2025"
         variant:
