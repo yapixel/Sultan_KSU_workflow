@@ -59,6 +59,7 @@ jobs:
             folder: "KernelSU"
             branch: "builtin"
             susfsless_kernel_patches: "sultan/scope-min-hooks-v1.6.patch"
+            susfs_ksu_patches: "sukisu/throne_tracker.c.fix.patch"
             extra_configs: "CONFIG_KSU_MANUAL_SU=n CONFIG_COMPAT=y CONFIG_ZRAM_GS_WRITEBACK=y"
             susfs_configs: "CONFIG_KSU_SUSFS=y CONFIG_KSU_NONE_HOOK=y"
             susfsless_configs: "CONFIG_KSU_MANUAL_HOOK=y"
@@ -120,8 +121,8 @@ jobs:
           git clone --depth=1 https://github.com/TheSillyOk/kernel_ls_patches ok_patches
           echo "ok_dir=$PWD/ok_patches" >> $GITHUB_ENV
 
-          git clone --depth=1 https://github.com/yapixel/kernel_patches pixel_patches
-          echo "ok_dir=$PWD/pixel_patches" >> $GITHUB_ENV
+          git clone --depth=1 https://github.com/yapixel/kernel_patches -b dev pixel_patches
+          echo "pixel_dir=$PWD/pixel_patches" >> $GITHUB_ENV
          
           
           ${{ matrix.susfs || false }} && ksu_repo="${{ matrix.build.susfs_repo || matrix.build.repo }}" || ksu_repo="${{ matrix.build.repo }}" || true
@@ -218,8 +219,9 @@ jobs:
           if [[ -n "${{ matrix.build.susfs_ksu_patches }}" ]]; then
             cd "${{ env.kernel_dir }}/${{ matrix.build.folder }}"
             for patch_name in ${{ matrix.build.susfs_ksu_patches }}; do
-              patch -p1 -F 3 < "${{ env.ok_dir }}/${patch_name}"
+              patch -p1 -F 3 < "${{ env.pixel_dir }}/${patch_name}"
             done
+            cd "${{ env.kernel_dir }}"
           fi
 
           if [[ -n "${{ matrix.build.susfs_kernel_patches }}" ]]; then
@@ -256,8 +258,8 @@ jobs:
         run: |
           cd "${{ env.kernel_dir }}"
 
-          export KBUILD_BUILD_USER="build-user"
-          export KBUILD_BUILD_HOST="build-host"
+          export KBUILD_BUILD_USER="TheSillyOk"
+          export KBUILD_BUILD_HOST="Github"
 
           make CROSS_COMPILE=$GITHUB_WORKSPACE/gcc-14.2.0-nolibc/aarch64-linux/bin/aarch64-linux- CC=$GITHUB_WORKSPACE/gcc-14.2.0-nolibc/aarch64-linux/bin/aarch64-linux-gcc -j$(nproc --all) ${{ matrix.kernel.defconfig }}
           make CROSS_COMPILE="ccache $GITHUB_WORKSPACE/gcc-14.2.0-nolibc/aarch64-linux/bin/aarch64-linux-" CC="ccache $GITHUB_WORKSPACE/gcc-14.2.0-nolibc/aarch64-linux/bin/aarch64-linux-gcc" -j$(nproc --all)
