@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        susfs: [false, true]
+        susfs: [true]  # Changed from [false, true] to only [true]
         build:
 #          - type: Normal
 #            ksu: false
@@ -120,6 +120,10 @@ jobs:
           git clone --depth=1 https://github.com/TheSillyOk/kernel_ls_patches ok_patches
           echo "ok_dir=$PWD/ok_patches" >> $GITHUB_ENV
 
+          git clone --depth=1 https://github.com/yapixel/kernel_patches pixel_patches
+          echo "ok_dir=$PWD/pixel_patches" >> $GITHUB_ENV
+         
+          
           ${{ matrix.susfs || false }} && ksu_repo="${{ matrix.build.susfs_repo || matrix.build.repo }}" || ksu_repo="${{ matrix.build.repo }}" || true
           echo "ksu_repo=$ksu_repo" >> $GITHUB_ENV
           ${{ matrix.susfs || false }} && ksu_branch="${{ matrix.build.susfs_branch || matrix.build.branch }}" || ksu_branch="${{ matrix.build.branch }}" || true
@@ -252,8 +256,8 @@ jobs:
         run: |
           cd "${{ env.kernel_dir }}"
 
-          export KBUILD_BUILD_USER="TheSillyOk"
-          export KBUILD_BUILD_HOST="Github"
+          export KBUILD_BUILD_USER="build-user"
+          export KBUILD_BUILD_HOST="build-host"
 
           make CROSS_COMPILE=$GITHUB_WORKSPACE/gcc-14.2.0-nolibc/aarch64-linux/bin/aarch64-linux- CC=$GITHUB_WORKSPACE/gcc-14.2.0-nolibc/aarch64-linux/bin/aarch64-linux-gcc -j$(nproc --all) ${{ matrix.kernel.defconfig }}
           make CROSS_COMPILE="ccache $GITHUB_WORKSPACE/gcc-14.2.0-nolibc/aarch64-linux/bin/aarch64-linux-" CC="ccache $GITHUB_WORKSPACE/gcc-14.2.0-nolibc/aarch64-linux/bin/aarch64-linux-gcc" -j$(nproc --all)
