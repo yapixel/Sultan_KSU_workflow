@@ -59,7 +59,7 @@ jobs:
             folder: "KernelSU"
             branch: "builtin"
             susfsless_kernel_patches: "sultan/scope-min-hooks-v1.6.patch"
-            susfs_ksu_patches: "sukisu/throne_tracker.c.fix.patch"
+            susfs_kernel_patches: "sukisu/throne_tracker.c.fix.patch"
             extra_configs: "CONFIG_KSU_MANUAL_SU=n CONFIG_COMPAT=y CONFIG_ZRAM_GS_WRITEBACK=y"
             susfs_configs: "CONFIG_KSU_SUSFS=y CONFIG_KSU_NONE_HOOK=y"
             susfsless_configs: "CONFIG_KSU_MANUAL_HOOK=y"
@@ -216,6 +216,10 @@ jobs:
           cp ${{ env.susfs_dir }}/kernel_patches/fs/* ${{ env.kernel_dir }}/fs/
           cp ${{ env.susfs_dir }}/kernel_patches/include/linux/* ${{ env.kernel_dir }}/include/linux/
 
+          cd "${{ env.kernel_dir }}"
+          patch -p1 < 50_add_susfs_in_gki-${{ matrix.kernel.android_version }}-${{ matrix.kernel.kernel_version }}.patch || true
+          patch -p1 --fuzz=3 < ${{ env.james_dir }}/sultan/sys.c_fix.patch
+
           if [[ -n "${{ matrix.build.susfs_ksu_patches }}" ]]; then
             cd "${{ env.kernel_dir }}/${{ matrix.build.folder }}"
             for patch_name in ${{ matrix.build.susfs_ksu_patches }}; do
@@ -226,14 +230,9 @@ jobs:
 
           if [[ -n "${{ matrix.build.susfs_kernel_patches }}" ]]; then
             for patch_name in ${{ matrix.build.susfs_kernel_patches }}; do
-              patch -p1 -F 3 < "${{ env.ok_dir }}/${patch_name}"
+              patch -p1 -F 3 < "${{ env.pixel_dir }}/${patch_name}"
             done
-            cd "${{ env.kernel_dir }}"
           fi
-
-          cd "${{ env.kernel_dir }}"
-          patch -p1 < 50_add_susfs_in_gki-${{ matrix.kernel.android_version }}-${{ matrix.kernel.kernel_version }}.patch || true
-          patch -p1 --fuzz=3 < ${{ env.james_dir }}/sultan/sys.c_fix.patch
 
           if [[ -n "${{ matrix.build.susfs_configs }}" ]]; then
             for config in ${{ matrix.build.susfs_configs }}; do
