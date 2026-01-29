@@ -38,7 +38,7 @@ jobs:
             folder: "KernelSU-Next"
             branch: "legacy"
             susfs_branch: "dev_susfs"
-            susfsless_ksu_patches: "KSUN/WildJames-Manager.patch"
+            susfsless_ksu_patches: "KSUN/WildJames-Manager.patch try.patch"
             susfsless_kernel_patches: "sultan/scope-min-hooks-v1.6.patch"
             extra_configs: "CONFIG_KSU_KPROBES_HOOK=n"
             susfsless_configs: "CONFIG_KSU_SUSFS=n"
@@ -52,17 +52,17 @@ jobs:
             susfsless_kernel_patches: "sultan/scope-min-hooks-v1.6.patch"
             extra_configs: "CONFIG_KSU_MANUAL_HOOK=y"
             ak3_suffix: "_RKSU"
-          - type: SukiSU
-            ksu: true
-            repo: "SukiSU-Ultra/SukiSU-Ultra"
-            folder: "KernelSU"
-            branch: "builtin"
-            susfsless_kernel_patches: "sultan/scope-min-hooks-v1.6.patch"
-            extra_configs: "CONFIG_KSU_MANUAL_SU=n CONFIG_COMPAT=y CONFIG_ZRAM_GS_WRITEBACK=y"
-            susfs_configs: "CONFIG_KSU_SUSFS=y CONFIG_KSU_NONE_HOOK=y"
-            susfsless_configs: "CONFIG_KSU_MANUAL_HOOK=y"
-            ak3_suffix: "_SukiSU"
-            # kpm: "https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/refs/heads/main/kpm/patch_linux"
+#          - type: SukiSU
+#            ksu: true
+#            repo: "SukiSU-Ultra/SukiSU-Ultra"
+#            folder: "KernelSU"
+#            branch: "builtin"
+#            susfsless_kernel_patches: "sultan/scope-min-hooks-v1.6.patch"
+#            extra_configs: "CONFIG_KSU_MANUAL_SU=n CONFIG_COMPAT=y CONFIG_ZRAM_GS_WRITEBACK=y"
+#            susfs_configs: "CONFIG_KSU_SUSFS=y CONFIG_KSU_NONE_HOOK=y"
+#            susfsless_configs: "CONFIG_KSU_MANUAL_HOOK=y"
+#            ak3_suffix: "_SukiSU"
+#            # kpm: "https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/refs/heads/main/kpm/patch_linux"
           - type: xxKSU
             ksu: true
             exclude: susfs
@@ -220,11 +220,16 @@ jobs:
             done
           fi
 
+          cd "${{ env.kernel_dir }}/${{ matrix.build.folder }}"
+          sed -i 's/mnts_for_all_procs/mnts_for_non_su_procs/' kernel/supercalls.c
+          sed -i 's/MNTS_FOR_ALL_PROCS/MNTS_FOR_NON_SU_PROCS/' kernel/supercalls.c
+          cd -
+
           if [[ -n "${{ matrix.build.susfs_kernel_patches }}" ]]; then
+            cd "${{ env.kernel_dir }}"
             for patch_name in ${{ matrix.build.susfs_kernel_patches }}; do
               patch -p1 -F 3 < "${{ env.ok_dir }}/${patch_name}"
             done
-            cd "${{ env.kernel_dir }}"
           fi
 
           cd "${{ env.kernel_dir }}"
@@ -329,14 +334,12 @@ jobs:
           -> https://github.com/WildKernels/Wild_KSU
           -> https://github.com/KernelSU-Next/KernelSU-Next
           -> https://github.com/rsuntk/KernelSU
-          -> https://github.com/SukiSU-Ultra/SukiSU-Ultra
           -> https://github.com/backslashxx/KernelSU/releases / https://t.me/kowsu_build
           
           Features:
           [+] KSU [${{ env.KSU_V }}](${{ env.KSU_URL}})
           [+] KSUN [${{ env.KSUN_V }}](${{ env.KSUN_URL }})
           [+] RKSU [${{ env.RKSU_V }}](${{ env.RKSU_URL }})
-          [+] SUKI [${{ env.SUKI_V }}](${{ env.SUKI_URL }})
           [+] xxKSU [${{ env.xxKSU_V }}](${{ env.xxKSU_URL }})
           [+] SUSFS v2.0.0
           EOF
