@@ -74,11 +74,11 @@ jobs:
             kernel_patches: "sultan/scope-min-hooks-v1.9.patch"
             ak3_suffix: "_xxKSU"
         kernel:
-          - codename: zuma
+          - codename: gs201
             repo: "android_kernel_google_tensynos"
             android_version: "android14"
             kernel_version: "6.1"
-            defconfig: zuma_defconfig
+            defconfig: gs201_defconfig
             local_version: "-android14-11-gfa1d6308d1fe-ab14691759"
             build_date: "Fri Jan  9 16:33:46 UTC 2026"
         exclude:
