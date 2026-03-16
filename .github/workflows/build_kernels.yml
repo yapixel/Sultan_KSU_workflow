@@ -32,26 +32,28 @@ jobs:
             extra_configs: "CONFIG_KPROBES=n"
             susfs_ksu_patches: "../susfs/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch"
             ak3_suffix: "_KSU"
-#          - type: KSUN
-#            ksu: true
-#            repo: "KernelSU-Next/KernelSU-Next"
-#            folder: "KernelSU-Next"
-#            branch: "legacy"
-#            susfs_branch: "dev_susfs"
-#            susfsless_ksu_patches: "KSUN/WildJames-Manager.patch try.patch"
-#            susfsless_kernel_patches: "sultan/scope-min-hooks-v1.6.patch"
-#            extra_configs: "CONFIG_KSU_KPROBES_HOOK=n"
-#            susfsless_configs: "CONFIG_KSU_SUSFS=n"
-#            ak3_suffix: "_KSUNext"
-#          - type: RKSU
-#            ksu: true
-#            repo: "rsuntk/KernelSU"
-#            folder: "KernelSU"
-#            branch: "main"
-#            susfs_branch: "susfs-rksu-master"
-#            susfsless_kernel_patches: "sultan/scope-min-hooks-v1.6.patch"
-#            extra_configs: "CONFIG_KSU_MANUAL_HOOK=y"
-#            ak3_suffix: "_RKSU"
+          - type: KSUN
+            ksu: true
+            repo: "KernelSU-Next/KernelSU-Next"
+            susfs_repo: "pershoot/KernelSU-Next"
+            folder: "KernelSU-Next"
+            branch: "legacy"
+            susfs_branch: "dev-susfs"
+            susfsless_ksu_patches: "try.patch"
+            susfsless_kernel_patches: "sultan/scope-min-hooks-v1.6.patch"
+            extra_configs: "CONFIG_KSU_KPROBES_HOOK=n"
+            susfsless_configs: "CONFIG_KSU_SUSFS=n"
+            ak3_suffix: "_KSUNext"
+          - type: RKSU
+            ksu: true
+            exclude: susfs
+            repo: "rsuntk/KernelSU"
+            folder: "KernelSU"
+            branch: "main"
+            susfs_branch: "susfs-rksu-master"
+            susfsless_kernel_patches: "sultan/scope-min-hooks-v1.6.patch"
+            extra_configs: "CONFIG_KSU_MANUAL_HOOK=y"
+            ak3_suffix: "_RKSU"
 #          - type: SukiSU
 #            ksu: true
 #            repo: "SukiSU-Ultra/SukiSU-Ultra"
@@ -69,7 +71,7 @@ jobs:
             repo: "backslashxx/KernelSU"
             folder: "KernelSU"
             branch: "master"
-            kernel_patches: "sultan/scope-min-hooks-v1.6.patch"
+            kernel_patches: "sultan/scope-min-hooks-v1.9.patch"
             ak3_suffix: "_xxKSU"
         kernel:
           - codename: zuma
@@ -77,8 +79,8 @@ jobs:
             android_version: "android14"
             kernel_version: "6.1"
             defconfig: zuma_defconfig
-            local_version: "-android14-11-gc1de4747ac59-ab14219743"
-            build_date: "Mon Oct 6 16:50:48 UTC 2025"
+            local_version: "-android14-11-gfa1d6308d1fe-ab14691759"
+            build_date: "Fri Jan  9 16:33:46 UTC 2026"
         exclude:
           - build:
               exclude: susfs
@@ -112,7 +114,11 @@ jobs:
           echo "ak3_dir=$PWD/AK3" >> $GITHUB_ENV
 
           if [[ "${{ matrix.susfs }}" ]]; then
-            git clone --depth=5 https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH" susfs
+            if [[ "${{ matrix.build.type }}" == "KSUN" ]]; then
+              git clone --depth=5 https://gitlab.com/pershoot/susfs4ksu.git -b "${SUSFS_BRANCH}-dev" susfs
+            else
+              git clone --depth=5 https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH" susfs
+            fi
             echo "susfs_dir=$PWD/susfs" >> $GITHUB_ENV
           fi
 
@@ -247,7 +253,7 @@ jobs:
           fi
 
       - name: Cache Kernel Build
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.ccache
           key: ${{ matrix.kernel.codename }}-${{ matrix.build.type }}-SUSFS_${{ matrix.susfs }}-ccache-${{ github.sha }}-${{ github.run_number }}
@@ -260,8 +266,8 @@ jobs:
         run: |
           cd "${{ env.kernel_dir }}"
 
-          export KBUILD_BUILD_USER="TheSillyOk"
-          export KBUILD_BUILD_HOST="Github"
+          export KBUILD_BUILD_USER="build-user"
+          export KBUILD_BUILD_HOST="build-host"
 
           make CROSS_COMPILE=$GITHUB_WORKSPACE/gcc-14.2.0-nolibc/aarch64-linux/bin/aarch64-linux- CC=$GITHUB_WORKSPACE/gcc-14.2.0-nolibc/aarch64-linux/bin/aarch64-linux-gcc -j$(nproc --all) ${{ matrix.kernel.defconfig }}
           make CROSS_COMPILE="ccache $GITHUB_WORKSPACE/gcc-14.2.0-nolibc/aarch64-linux/bin/aarch64-linux-" CC="ccache $GITHUB_WORKSPACE/gcc-14.2.0-nolibc/aarch64-linux/bin/aarch64-linux-gcc" -j$(nproc --all)
@@ -275,7 +281,7 @@ jobs:
           cat ./out/google-devices/${{ matrix.kernel.codename }}/dts/*.dtb > ${{ env.ak3_dir }}/dtb
 
       - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ env.zip_name }}
           path: ${{ env.ak3_dir }}/*
@@ -288,7 +294,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: ./downloaded-artifacts
 
