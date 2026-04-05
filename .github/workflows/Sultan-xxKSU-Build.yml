@@ -78,7 +78,7 @@ jobs:
           cd "${{ env.kernel_dir }}"
 
           # Patch using YOUR synced scope patch - Added -F 3 for robustness
-          patch -p1 -F 3 < "${{ env.patch_dir }}/syscall_hook/scope-min-hooks-v1.9.patch"
+          patch -p1 -F 3 < "${{ env.patch_dir }}/syscall_hook/scope-min-hooks-v1.9-sultan.patch"
 
           # Use double quotes in sed to ensure $config_name expands correctly
           configs="CONFIG_KSU=y CONFIG_TMPFS_XATTR=y CONFIG_TMPFS_POSIX_ACL=y CONFIG_IP_NF_TARGET_TTL=y CONFIG_IP6_NF_TARGET_HL=y CONFIG_IP6_NF_MATCH_HL=y CONFIG_TCP_CONG_BBR=y CONFIG_DEFAULT_BBR=y"
@@ -92,6 +92,19 @@ jobs:
             sed -i -E "s/.*($config_name=.*)/# \1/gi" arch/arm64/configs/${{ matrix.kernel.defconfig }}
             echo -e "\n${config}" >> "arch/arm64/configs/${{ matrix.kernel.defconfig }}"
           done
+
+      - name: Upload Patch Rejects
+        if: failure()
+        run: |
+          find "${{ env.kernel_dir }}" -name "*.rej" | tar -czf /tmp/rejects.tar.gz -T - || true
+        continue-on-error: true
+
+      - name: Upload Rejects Artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: patch-rejects
+          path: /tmp/rejects.tar.gz
 
       - name: Apply SUSFS Integration (De-inlined)
         if: matrix.susfs
