@@ -71,7 +71,7 @@ jobs:
           cd "${{ env.kernel_dir }}"
           
           # Patch syscall hooks for BOTH versions (SUSFS and No-SUSFS)
-          patch -p1 < "${{ env.patch_dir }}/syscall_hook/scope-min-hooks-v1.9.patch"
+          patch -p1 -F 3 < "${{ env.patch_dir }}/syscall_hook/scope-min-hooks-v1.9.patch"
 
           # Basic KSU configs
           configs="CONFIG_KSU=y CONFIG_TMPFS_XATTR=y CONFIG_TMPFS_POSIX_ACL=y"
