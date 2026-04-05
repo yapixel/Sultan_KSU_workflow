@@ -93,10 +93,13 @@ jobs:
             echo -e "\n${config}" >> "arch/arm64/configs/${{ matrix.kernel.defconfig }}"
           done
 
-      - name: Upload Patch Rejects
+      - name: Collect Patch Rejects
         if: failure()
         run: |
-          find "${{ env.kernel_dir }}" -name "*.rej" | tar -czf /tmp/rejects.tar.gz -T - || true
+          mkdir -p /tmp/rejects
+          find "${{ env.kernel_dir }}" -name "*.rej" -exec cp --parents {} /tmp/rejects/ \;
+          echo "Rejects found:"
+          find /tmp/rejects -type f
         continue-on-error: true
 
       - name: Upload Rejects Artifact
@@ -104,7 +107,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: patch-rejects
-          path: /tmp/rejects.tar.gz
+          path: /tmp/rejects/
 
       - name: Apply SUSFS Integration (De-inlined)
         if: matrix.susfs
