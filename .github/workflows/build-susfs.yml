@@ -16,7 +16,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Parallel builds: one with SUSFS, one without
         susfs: [false, true]
         build:
           - type: xxKSU
@@ -49,25 +48,22 @@ jobs:
 
           sudo apt-get install -y --no-install-recommends ccache
           
-          # Clone AK3 for packaging
+          # Clone AnyKernel3
           git clone --depth=1 https://github.com/TheWildJames/AnyKernel3.git -b "$ANYKERNEL_BRANCH" AK3
           echo "ak3_dir=$PWD/AK3" >> $GITHUB_ENV
 
-          # Clone your yapixel patch repo
-          git clone --depth=1 https://github.com/yapixel/kernel_patches.git -b dev my_patches
-          echo "patch_dir=$PWD/my_patches" >> $GITHUB_ENV
+          # Clone YOUR yapixel repo where you synced the patches
+          git clone --depth=1 https://github.com/yapixel/kernel_patches.git -b dev yapixel_patches
+          echo "patch_dir=$PWD/yapixel_patches" >> $GITHUB_ENV
 
-          # Clone SUSFS core source if building SUSFS variant
           if [[ "${{ matrix.susfs }}" == "true" ]]; then
             git clone --depth=5 https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH" susfs
             echo "susfs_dir=$PWD/susfs" >> $GITHUB_ENV
           fi
           
-          # Clone Sultan Kernel Source
           git clone --depth=1 https://github.com/kerneltoast/${{ matrix.kernel.repo }} sultan
           echo "kernel_dir=$PWD/sultan" >> $GITHUB_ENV
 
-          # Prepare Final Zip Name
           build_type="${{ matrix.build.ak3_suffix }}"
           [[ "${{ matrix.susfs }}" == "true" ]] && build_type="${build_type}-SUSFS" || build_type="${build_type}-NoSUSFS"
           echo "zip_name=$(date +"%d.%m.%Y")-${{ matrix.kernel.codename }}${build_type}-Sultan" >> $GITHUB_ENV
@@ -76,43 +72,43 @@ jobs:
         run: |
           cd "${{ env.kernel_dir }}"
           
-          # Apply Sultan syscall scope hooks (Universal for both builds)
+          # Patch using YOUR synced scope patch - Added -F 3 for robustness
           patch -p1 -F 3 < "${{ env.patch_dir }}/syscall_hook/scope-min-hooks-v1.9.patch"
 
-          # Inject custom configs into defconfig
+          # Use double quotes in sed to ensure $config_name expands correctly
           configs="CONFIG_KSU=y CONFIG_TMPFS_XATTR=y CONFIG_TMPFS_POSIX_ACL=y CONFIG_IP_NF_TARGET_TTL=y CONFIG_IP6_NF_TARGET_HL=y CONFIG_IP6_NF_MATCH_HL=y CONFIG_TCP_CONG_BBR=y CONFIG_DEFAULT_BBR=y"
           
           if [[ "${{ matrix.susfs }}" == "true" ]]; then
-            # Enable SUSFS-specific features defined in your patch
-            configs="$configs CONFIG_KSU_SUSFS=y CONFIG_KSU_SUSFS_SUS_PATH=y CONFIG_KSU_SUSFS_SUS_MOUNT=y CONFIG_KSU_SUSFS_SUS_KSTAT=y CONFIG_KSU_SUSFS_TRY_UMOUNT=y CONFIG_KSU_SUSFS_SPOOF_UNAME=y CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y"
+            configs="$configs CONFIG_KSU_SUSFS=y CONFIG_KSU_SUSFS_SUS_PATH=y CONFIG_KSU_SUSFS_SUS_MOUNT=y CONFIG_KSU_SUSFS_SUS_KSTAT=y CONFIG_KSU_SUSFS_TRY_UMOUNT=y CONFIG_KSU_SUSFS_SPOOF_UNAME=y"
           fi
 
           for config in $configs; do
+            config_name=$(echo "${config}" | cut -d "=" -f 1)
+            sed -i -E "s/.*($config_name=.*)/# \1/gi" arch/arm64/configs/${{ matrix.kernel.defconfig }}
             echo -e "\n${config}" >> "arch/arm64/configs/${{ matrix.kernel.defconfig }}"
           done
 
       - name: Sync xxKSU
         run: |
           cd "${{ env.kernel_dir }}"
-          # Download KSU source into the KernelSU folder
           curl -LSs "https://raw.githubusercontent.com/${{ matrix.build.repo }}/${{ matrix.build.branch }}/kernel/setup.sh" | bash -s ${{ matrix.build.branch }}
 
       - name: Apply SUSFS Integration (De-inlined)
         if: matrix.susfs
         run: |
-          # 1. Copy SUSFS core files into the kernel tree
+          # 1. Copy SUSFS core files
           cp ${{ env.susfs_dir }}/kernel_patches/fs/* ${{ env.kernel_dir }}/fs/
           cp ${{ env.susfs_dir }}/kernel_patches/include/linux/* ${{ env.kernel_dir }}/include/linux/
 
-          # 2. Patch the xxKSU folder with your De-inlined patch (CRITICAL: After KSU Sync)
+          # 2. Patch xxKSU folder with your De-inlined patch
           cd "${{ env.kernel_dir }}/${{ matrix.build.folder }}"
           patch -p1 -F 3 < "${{ env.patch_dir }}/xxksu/0001-xxKSU-kernel-implement-susfs-v2.1.0-De-inlined.patch"
           
-          # 3. Patch the main kernel with standard SUSFS GKI patch
+          # 3. Patch main kernel tree
           cd "${{ env.kernel_dir }}"
           patch -p1 -F 3 < ${{ env.susfs_dir }}/kernel_patches/50_add_susfs_in_gki-${{ matrix.kernel.android_version }}-${{ matrix.kernel.kernel_version }}.patch || true
           
-          # 4. Apply your Sultan-specific sys.c fix
+          # 4. Final sys.c fix
           patch -p1 -F 3 < "${{ env.patch_dir }}/sultan/sys.c_fix.patch"
 
       - name: Build Kernel
@@ -121,7 +117,6 @@ jobs:
           export KBUILD_BUILD_USER="TheSillyOk"
           export KBUILD_BUILD_HOST="Github"
           
-          # Run compilation
           make CROSS_COMPILE=${{ env.TOOLCHAIN_PATH }} CC="${{ env.TOOLCHAIN_PATH }}gcc" -j$(nproc --all) ${{ matrix.kernel.defconfig }}
           make CROSS_COMPILE=${{ env.TOOLCHAIN_PATH }} CC="${{ env.TOOLCHAIN_PATH }}gcc" -j$(nproc --all)
 
