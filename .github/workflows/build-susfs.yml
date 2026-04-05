@@ -16,10 +16,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # This will trigger two parallel builds: one with and one without SUSFS
+        # Parallel builds: one with SUSFS, one without
         susfs: [false, true]
         build:
           - type: xxKSU
+            ksu: true
             repo: "backslashxx/KernelSU"
             folder: "KernelSU"
             branch: "master"
@@ -48,66 +49,71 @@ jobs:
 
           sudo apt-get install -y --no-install-recommends ccache
           
+          # Clone AK3 for packaging
           git clone --depth=1 https://github.com/TheWildJames/AnyKernel3.git -b "$ANYKERNEL_BRANCH" AK3
           echo "ak3_dir=$PWD/AK3" >> $GITHUB_ENV
 
+          # Clone your yapixel patch repo
           git clone --depth=1 https://github.com/yapixel/kernel_patches.git -b dev my_patches
           echo "patch_dir=$PWD/my_patches" >> $GITHUB_ENV
 
+          # Clone SUSFS core source if building SUSFS variant
           if [[ "${{ matrix.susfs }}" == "true" ]]; then
             git clone --depth=5 https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_BRANCH" susfs
             echo "susfs_dir=$PWD/susfs" >> $GITHUB_ENV
           fi
           
+          # Clone Sultan Kernel Source
           git clone --depth=1 https://github.com/kerneltoast/${{ matrix.kernel.repo }} sultan
           echo "kernel_dir=$PWD/sultan" >> $GITHUB_ENV
 
+          # Prepare Final Zip Name
           build_type="${{ matrix.build.ak3_suffix }}"
           [[ "${{ matrix.susfs }}" == "true" ]] && build_type="${build_type}-SUSFS" || build_type="${build_type}-NoSUSFS"
           echo "zip_name=$(date +"%d.%m.%Y")-${{ matrix.kernel.codename }}${build_type}-Sultan" >> $GITHUB_ENV
 
-      - name: Setup Base Kernel (Hooks & Configs)
+      - name: Setup Base Kernel Hooks
         run: |
           cd "${{ env.kernel_dir }}"
           
-          # Patch syscall hooks for BOTH versions (SUSFS and No-SUSFS)
+          # Apply Sultan syscall scope hooks (Universal for both builds)
           patch -p1 -F 3 < "${{ env.patch_dir }}/syscall_hook/scope-min-hooks-v1.9.patch"
 
-          # Basic KSU configs
-          configs="CONFIG_KSU=y CONFIG_TMPFS_XATTR=y CONFIG_TMPFS_POSIX_ACL=y"
+          # Inject custom configs into defconfig
+          configs="CONFIG_KSU=y CONFIG_TMPFS_XATTR=y CONFIG_TMPFS_POSIX_ACL=y CONFIG_IP_NF_TARGET_TTL=y CONFIG_IP6_NF_TARGET_HL=y CONFIG_IP6_NF_MATCH_HL=y CONFIG_TCP_CONG_BBR=y CONFIG_DEFAULT_BBR=y"
           
-          # Only add SUSFS configs if applicable
           if [[ "${{ matrix.susfs }}" == "true" ]]; then
-            configs="$configs CONFIG_KSU_SUSFS=y CONFIG_KSU_SUSFS_SUS_PATH=y CONFIG_KSU_SUSFS_SUS_MOUNT=y CONFIG_KSU_SUSFS_SUS_KSTAT=y CONFIG_KSU_SUSFS_TRY_UMOUNT=y CONFIG_KSU_SUSFS_SPOOF_UNAME=y"
+            # Enable SUSFS-specific features defined in your patch
+            configs="$configs CONFIG_KSU_SUSFS=y CONFIG_KSU_SUSFS_SUS_PATH=y CONFIG_KSU_SUSFS_SUS_MOUNT=y CONFIG_KSU_SUSFS_SUS_KSTAT=y CONFIG_KSU_SUSFS_TRY_UMOUNT=y CONFIG_KSU_SUSFS_SPOOF_UNAME=y CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y"
           fi
 
           for config in $configs; do
             echo -e "\n${config}" >> "arch/arm64/configs/${{ matrix.kernel.defconfig }}"
           done
 
-      - name: Sync xxKSU Source
+      - name: Sync xxKSU
         run: |
           cd "${{ env.kernel_dir }}"
-          # Creates the KernelSU folder for both builds
+          # Download KSU source into the KernelSU folder
           curl -LSs "https://raw.githubusercontent.com/${{ matrix.build.repo }}/${{ matrix.build.branch }}/kernel/setup.sh" | bash -s ${{ matrix.build.branch }}
 
-      - name: Apply SUSFS-Specific Patches
+      - name: Apply SUSFS Integration (De-inlined)
         if: matrix.susfs
         run: |
-          # 1. Copy core SUSFS headers/files
+          # 1. Copy SUSFS core files into the kernel tree
           cp ${{ env.susfs_dir }}/kernel_patches/fs/* ${{ env.kernel_dir }}/fs/
           cp ${{ env.susfs_dir }}/kernel_patches/include/linux/* ${{ env.kernel_dir }}/include/linux/
 
-          # 2. Patch the newly synced xxKSU source
+          # 2. Patch the xxKSU folder with your De-inlined patch (CRITICAL: After KSU Sync)
           cd "${{ env.kernel_dir }}/${{ matrix.build.folder }}"
-          patch -p1 < "${{ env.patch_dir }}/xxksu/0001-xxKSU-kernel-implement-susfs-v2.1.0-De-inlined.patch"
+          patch -p1 -F 3 < "${{ env.patch_dir }}/xxksu/0001-xxKSU-kernel-implement-susfs-v2.1.0-De-inlined.patch"
           
-          # 3. Patch the main kernel tree
+          # 3. Patch the main kernel with standard SUSFS GKI patch
           cd "${{ env.kernel_dir }}"
-          patch -p1 < ${{ env.susfs_dir }}/kernel_patches/50_add_susfs_in_gki-${{ matrix.kernel.android_version }}-${{ matrix.kernel.kernel_version }}.patch || true
+          patch -p1 -F 3 < ${{ env.susfs_dir }}/kernel_patches/50_add_susfs_in_gki-${{ matrix.kernel.android_version }}-${{ matrix.kernel.kernel_version }}.patch || true
           
-          # 4. Final Sultan/SUSFS fix
-          patch -p1 < "${{ env.patch_dir }}/sultan/sys.c_fix.patch"
+          # 4. Apply your Sultan-specific sys.c fix
+          patch -p1 -F 3 < "${{ env.patch_dir }}/sultan/sys.c_fix.patch"
 
       - name: Build Kernel
         run: |
@@ -115,16 +121,17 @@ jobs:
           export KBUILD_BUILD_USER="TheSillyOk"
           export KBUILD_BUILD_HOST="Github"
           
-          # Generate defconfig and Compile
+          # Run compilation
           make CROSS_COMPILE=${{ env.TOOLCHAIN_PATH }} CC="${{ env.TOOLCHAIN_PATH }}gcc" -j$(nproc --all) ${{ matrix.kernel.defconfig }}
           make CROSS_COMPILE=${{ env.TOOLCHAIN_PATH }} CC="${{ env.TOOLCHAIN_PATH }}gcc" -j$(nproc --all)
 
-      - name: Package AnyKernel3
+      - name: Setup AnyKernel3
         run: |
-          cp ${{ env.kernel_dir }}/out/arch/arm64/boot/Image.lz4 ${{ env.ak3_dir }}/Image.lz4
-          cat ${{ env.kernel_dir }}/out/google-devices/${{ matrix.kernel.codename }}/dts/*.dtb > ${{ env.ak3_dir }}/dtb
+          cd "${{ env.kernel_dir }}"
+          cp out/arch/arm64/boot/Image.lz4 ${{ env.ak3_dir }}/Image.lz4
+          cat out/google-devices/${{ matrix.kernel.codename }}/dts/*.dtb > ${{ env.ak3_dir }}/dtb
 
-      - name: Upload Artifact
+      - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.zip_name }}
