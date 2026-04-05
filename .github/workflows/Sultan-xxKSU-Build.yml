@@ -78,7 +78,7 @@ jobs:
           cd "${{ env.kernel_dir }}"
 
           # Patch using YOUR synced scope patch - Added -F 3 for robustness
-          patch -p1 -F 3 < "${{ env.patch_dir }}/syscall_hook/scope-min-hooks-v1.9-sultan.patch"
+          patch -p1 -F 3 < "${{ env.patch_dir }}/syscall_hook/scope-min-hooks-v1.9.patch"
 
           # Use double quotes in sed to ensure $config_name expands correctly
           configs="CONFIG_KSU=y CONFIG_TMPFS_XATTR=y CONFIG_TMPFS_POSIX_ACL=y CONFIG_IP_NF_TARGET_TTL=y CONFIG_IP6_NF_TARGET_HL=y CONFIG_IP6_NF_MATCH_HL=y CONFIG_TCP_CONG_BBR=y CONFIG_DEFAULT_BBR=y"
