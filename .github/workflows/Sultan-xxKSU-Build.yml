@@ -82,7 +82,7 @@ jobs:
 
           # 4. Final Sultan fixes and Werror bypass
           #patch -p1 < "../yapixel_patches/sultan/sys.c_fix.patch"
-          patch -p1 < "../yapixel_patches/sultan/open.c_fix.patch"
+          #patch -p1 < "../yapixel_patches/sultan/open.c_fix.patch"
 
       - name: Build Kernel
         run: |
