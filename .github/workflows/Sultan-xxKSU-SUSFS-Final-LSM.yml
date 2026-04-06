@@ -87,6 +87,21 @@ jobs:
               -e 's/defined(CONFIG_KSU_KPROBES_KSUD)/0/g' \
               "$f"
           done
+      - name: Debug xxKSU symbol definitions
+        run: |
+         cd sultan/KernelSU
+         echo "=== grep ksu_handle_setresuid ==="
+         grep -rn "ksu_handle_setresuid" kernel/ || true
+         echo "=== grep ksu_su_compat_enabled ==="
+         grep -rn "ksu_su_compat_enabled" kernel/ || true
+         echo "=== grep ksu_handle_devpts ==="
+         grep -rn "ksu_handle_devpts" kernel/ || true
+         echo "=== grep ksu_handle_input ==="
+         grep -rn "ksu_handle_input" kernel/ || true
+         echo "=== grep ksu_init_rc_hook ==="
+         grep -rn "ksu_init_rc_hook" kernel/ || true
+         echo "=== grep susfs_try_umount ==="
+         grep -rn "susfs_try_umount" kernel/ || true
 
       - name: Setup Kernel Configs
         run: |
