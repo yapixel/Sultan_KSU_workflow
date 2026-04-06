@@ -37,7 +37,7 @@ jobs:
         run: |
           git clone --depth=1 https://github.com/TheWildJames/AnyKernel3.git -b sultan-${{ matrix.kernel.codename }} AK3
           git clone --depth=1 https://github.com/yapixel/kernel_patches.git -b dev yapixel_patches
-          git clone --depth=5 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-${{ matrix.kernel.android_version }}-${{ matrix.kernel.kernel_version }} susfs
+          git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b sultan-shiba-susfs-minimal susfs
           git clone --depth=1 https://github.com/kerneltoast/${{ matrix.kernel.repo }} sultan
           echo "kernel_dir=$PWD/sultan" >> $GITHUB_ENV
 
@@ -51,57 +51,24 @@ jobs:
           # 1. Apply De-inlined SUSFS patch
           patch -p1 < "../../yapixel_patches/xxksu/0001-xxKSU-kernel-implement-susfs-v2.1.0-De-inlined.patch"
 
-          # 2. De-staticize symbols referenced via extern by the 50-patch call sites
-          for f in kernel/hook/core_hook.c kernel/hook/ksud.c kernel/supercall/sucompat.c kernel/supercall/supercall.c; do
-            [ -f "$f" ] || continue
-            sed -i \
-              -e 's/^static int ksu_handle/int ksu_handle/g' \
-              -e 's/^static void ksu_handle/void ksu_handle/g' \
-              -e 's/^static bool ksu_handle/bool ksu_handle/g' \
-              "$f"
-          done
+          # 2. De-staticize ksu_su_compat_enabled — lives in kernel/feature/sucompat.c
+          #    The 50-patch injects: extern bool ksu_su_compat_enabled in fs/exec.c
+          sed -i 's/^static bool ksu_su_compat_enabled __read_mostly/bool ksu_su_compat_enabled __read_mostly/g' \
+            kernel/feature/sucompat.c
 
-          # ksu_su_compat_enabled — extern bool in fs/exec.c (50-patch)
-          for f in kernel/hook/core_hook.c kernel/supercall/sucompat.c; do
-            [ -f "$f" ] || continue
-            sed -i 's/^static bool ksu_su_compat_enabled/bool ksu_su_compat_enabled/g' "$f"
-          done
+          # 3. De-staticize ksu_handle_execveat — the 50-patch injects externs for it in fs/exec.c
+          sed -i \
+            -e 's/^static int ksu_handle_execveat\b/int ksu_handle_execveat/g' \
+            kernel/feature/sucompat.c
 
-          # ksu_execveat_hook — extern bool in fs/exec.c (50-patch)
-          for f in kernel/hook/core_hook.c kernel/hook/ksud.c; do
-            [ -f "$f" ] || continue
-            sed -i 's/^static bool ksu_execveat_hook/bool ksu_execveat_hook/g' "$f"
-          done
-
-          # ksu_input_hook — extern bool in drivers/input/input.c (50-patch)
-          for f in kernel/hook/core_hook.c kernel/hook/ksud.c; do
-            [ -f "$f" ] || continue
-            sed -i 's/^static bool ksu_input_hook/bool ksu_input_hook/g' "$f"
-          done
-
-          # 3. Ensure LSM hooks path is always compiled in (not gated on kprobes)
-          for f in kernel/hook/core_hook.c kernel/hook/ksud.c kernel/ksu.c; do
+          # 4. Ensure LSM hooks path is always compiled in (not gated on kprobes)
+          for f in kernel/hook/core_hook.c kernel/hook/ksud.c kernel/ksu.c kernel/runtime/ksud.c; do
             [ -f "$f" ] || continue
             sed -i \
               -e 's/defined(CONFIG_KSU_KPROBES_HOOK)/0/g' \
               -e 's/defined(CONFIG_KSU_KPROBES_KSUD)/0/g' \
               "$f"
           done
-      - name: Debug xxKSU symbol definitions
-        run: |
-         cd sultan/KernelSU
-         echo "=== grep ksu_handle_setresuid ==="
-         grep -rn "ksu_handle_setresuid" kernel/ || true
-         echo "=== grep ksu_su_compat_enabled ==="
-         grep -rn "ksu_su_compat_enabled" kernel/ || true
-         echo "=== grep ksu_handle_devpts ==="
-         grep -rn "ksu_handle_devpts" kernel/ || true
-         echo "=== grep ksu_handle_input ==="
-         grep -rn "ksu_handle_input" kernel/ || true
-         echo "=== grep ksu_init_rc_hook ==="
-         grep -rn "ksu_init_rc_hook" kernel/ || true
-         echo "=== grep susfs_try_umount ==="
-         grep -rn "susfs_try_umount" kernel/ || true
 
       - name: Setup Kernel Configs
         run: |
@@ -114,7 +81,7 @@ jobs:
                    CONFIG_KSU_SUSFS_SUS_PATH=y \
                    CONFIG_KSU_SUSFS_SUS_MOUNT=y \
                    CONFIG_KSU_SUSFS_SUS_KSTAT=y \
-                   CONFIG_KSU_SUSFS_TRY_UMOUNT=y \
+                   CONFIG_KSU_SUSFS_TRY_UMOUNT=n \
                    CONFIG_KSU_SUSFS_SPOOF_UNAME=y \
                    CONFIG_KSU_SUSFS_OPEN_REDIRECT=y"
 
@@ -131,32 +98,37 @@ jobs:
           # 1. Fix incompatible pointer type in fs/stat.c (GKI 6.1 Fix)
           sed -i 's/const char \*\*filename_user/struct filename \*\*filename/g' fs/stat.c || true
 
-          # 2. Copy SUSFS core files and apply SUSFS kernel patch
+          # 2. Copy SUSFS core files and apply minimal Sultan-compatible SUSFS kernel patch
           cp ../susfs/kernel_patches/fs/* fs/
           cp ../susfs/kernel_patches/include/linux/* include/linux/
-          # No || true: silent failure leaves susfs_try_umount / susfs_add_try_umount undefined
-          patch -p1 < ../susfs/kernel_patches/50_add_susfs_in_gki-${{ matrix.kernel.android_version }}-${{ matrix.kernel.kernel_version }}.patch || true
+          patch -p1 < ../susfs/kernel_patches/50_add_susfs_in_gki-${{ matrix.kernel.android_version }}-${{ matrix.kernel.kernel_version }}.patch
 
-          # 3. Final Sultan fixes and Werror bypass
-          patch -p1 < "../yapixel_patches/sultan/open.c_fix.patch"
+          # 3. Remove 50-patch call sites for symbols absent in this xxKSU De-inlined version
+          # ksu_handle_setresuid — injected into kernel/sys.c, not in this xxKSU
+          sed -i \
+            -e '/extern int ksu_handle_setresuid/d' \
+            -e '/(void)ksu_handle_setresuid/d' \
+            kernel/sys.c
+
+          # ksu_handle_devpts — injected into fs/devpts/inode.c, not in this xxKSU
+          sed -i \
+            -e '/extern int ksu_handle_devpts/d' \
+            -e '/ksu_handle_devpts(dentry->d_inode)/d' \
+            fs/devpts/inode.c
+
+          # ksu_input_hook + ksu_handle_input_handle_event — injected into drivers/input/input.c
+          # neither exists in this xxKSU
+          sed -i \
+            -e '/extern bool ksu_input_hook/d' \
+            -e '/extern.*ksu_handle_input_handle_event/d' \
+            -e '/if (unlikely(ksu_input_hook))/d' \
+            -e '/ksu_handle_input_handle_event/d' \
+            drivers/input/input.c
+
+          # 4. Final Sultan fixes and Werror bypass
           patch -p1 < "../yapixel_patches/sultan/sys.c_fix.patch"
           echo "CFLAGS_open.o += -Wno-unused-variable -Wno-unused-but-set-variable" >> fs/Makefile
           echo "CFLAGS_stat.o += -Wno-incompatible-pointer-types" >> fs/Makefile
-
-      - name: Debug post-50-patch symbols
-        run: |
-         echo "=== ksu_execveat_hook in KernelSU ==="
-         grep -rn "ksu_execveat_hook" sultan/KernelSU/kernel/ || true
-         echo "=== ksu_execveat_hook in kernel source ==="
-         grep -rn "ksu_execveat_hook" sultan/fs/ || true
-         echo "=== ksu_handle_execveat in KernelSU ==="
-         grep -rn "ksu_handle_execveat" sultan/KernelSU/kernel/ || true
-         echo "=== ksu_handle_execveat in kernel source ==="
-         grep -rn "ksu_handle_execveat" sultan/fs/ || true
-         echo "=== susfs_try_umount in susfs ==="
-         grep -rn "susfs_try_umount" sultan/fs/susfs.c || true
-         echo "=== susfs_add_try_umount in susfs ==="
-         grep -rn "susfs_add_try_umount" sultan/fs/susfs.c || true
 
       - name: Build Kernel
         run: |
