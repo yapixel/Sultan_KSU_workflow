@@ -143,6 +143,21 @@ jobs:
           echo "CFLAGS_open.o += -Wno-unused-variable -Wno-unused-but-set-variable" >> fs/Makefile
           echo "CFLAGS_stat.o += -Wno-incompatible-pointer-types" >> fs/Makefile
 
+      - name: Debug post-50-patch symbols
+        run: |
+         echo "=== ksu_execveat_hook in KernelSU ==="
+         grep -rn "ksu_execveat_hook" sultan/KernelSU/kernel/ || true
+         echo "=== ksu_execveat_hook in kernel source ==="
+         grep -rn "ksu_execveat_hook" sultan/fs/ || true
+         echo "=== ksu_handle_execveat in KernelSU ==="
+         grep -rn "ksu_handle_execveat" sultan/KernelSU/kernel/ || true
+         echo "=== ksu_handle_execveat in kernel source ==="
+         grep -rn "ksu_handle_execveat" sultan/fs/ || true
+         echo "=== susfs_try_umount in susfs ==="
+         grep -rn "susfs_try_umount" sultan/fs/susfs.c || true
+         echo "=== susfs_add_try_umount in susfs ==="
+         grep -rn "susfs_add_try_umount" sultan/fs/susfs.c || true
+
       - name: Build Kernel
         run: |
           cd sultan
