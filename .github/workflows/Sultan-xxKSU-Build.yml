@@ -1,4 +1,4 @@
-name: Sultan-xxKSU-SUSFS-Final-Build
+name: Sultan-xxKSU-SUSFS-Final-Manual
 
 permissions:
   contents: write
@@ -41,41 +41,52 @@ jobs:
           git clone --depth=1 https://github.com/kerneltoast/${{ matrix.kernel.repo }} sultan
           echo "kernel_dir=$PWD/sultan" >> $GITHUB_ENV
 
-      - name: Sync and Fix xxKSU Source
+      - name: Sync and Force Manual Hooks in xxKSU
         run: |
           cd sultan
           curl -LSs "https://raw.githubusercontent.com/${{ matrix.build.repo }}/${{ matrix.build.branch }}/kernel/setup.sh" | bash -s ${{ matrix.build.branch }}
           
+          # 1. Apply De-inlined SUSFS patch to xxKSU folder
           cd KernelSU
           patch -p1 < "../../yapixel_patches/xxksu/0001-xxKSU-kernel-implement-susfs-v2.1.0-De-inlined.patch"
           
+          # 2. FORCE MANUAL SYMBOLS: Remove Kprobe guards and 'static' keywords
+          # This ensures symbols like ksu_handle_execveat are defined statically for the linker
           echo "CFLAGS_ksu.o += -DKSU_KPROBES_HOOK=0 -DKSU_MANUAL_HOOK=1" >> Makefile
+          sed -i 's/static int ksu_handle/int ksu_handle/g' kernel/ksu.c || true
+          sed -i 's/static void ksu_handle/void ksu_handle/g' kernel/ksu.c || true
           sed -i 's/defined(CONFIG_KSU_KPROBES_KSUD)/0/g' kernel/ksu.c || true
           sed -i 's/defined(CONFIG_KSU_KPROBES_KSUD)/0/g' kernel/ksud.c || true
-          sed -i 's/static int ksu_handle/int ksu_handle/g' kernel/ksu.c || true
+          sed -i 's/defined(CONFIG_KSU_KPROBES_HOOK)/0/g' kernel/ksu.c || true
 
       - name: Setup Kernel Configs
         run: |
           cd sultan
+          # Disable KPROBES to prevent linker GOT/PLT errors on Sultan's toolchain
           configs="CONFIG_KSU=y CONFIG_KSU_KPROBES_HOOK=n CONFIG_KSU_KPROBES_KSUD=n CONFIG_KSU_LSM_SECURITY_HOOKS=y CONFIG_KSU_SUSFS=y CONFIG_KSU_SUSFS_SUS_PATH=y CONFIG_KSU_SUSFS_SUS_MOUNT=y CONFIG_KSU_SUSFS_SUS_KSTAT=y CONFIG_KSU_SUSFS_TRY_UMOUNT=y CONFIG_KSU_SUSFS_SPOOF_UNAME=y CONFIG_KSU_SUSFS_OPEN_REDIRECT=y"
           
           for config in $configs; do
             echo -e "\n${config}" >> "arch/arm64/configs/${{ matrix.kernel.defconfig }}"
           done
+          # Force KPROBES OFF
           sed -i 's/CONFIG_KPROBES=y/# CONFIG_KPROBES is not set/' arch/arm64/configs/${{ matrix.kernel.defconfig }}
 
-      - name: Apply Kernel Source Patches
+      - name: Apply Kernel Source Hooks and GKI 6.1 Fixes
         run: |
           cd sultan
+          # 1. Apply Scope Manual Hook Patch (The reference you provided)
           patch -p1 < ../yapixel_patches/syscall_hook/scope-min-hooks-v1.9-sultan.patch
           
-          # Fix incompatible pointer type for fs/stat.c in 6.1 GKI
-          sed -i 's/const char \*\*filename_user/struct filename \*\*filename/g' fs/stat.c
+          # 2. FIX: Incompatible pointer type in fs/stat.c (GKI 6.1 alignment)
+          # Changes 'const char **' to 'struct filename **' to match GKI 6.1 headers
+          sed -i 's/const char \*\*filename_user/struct filename \*\*filename/g' fs/stat.c || true
           
+          # 3. Copy SUSFS core files and apply SUSFS kernel patch
           cp ../susfs/kernel_patches/fs/* fs/
           cp ../susfs/kernel_patches/include/linux/* include/linux/
           patch -p1 < ../susfs/kernel_patches/50_add_susfs_in_gki-${{ matrix.kernel.android_version }}-${{ matrix.kernel.kernel_version }}.patch || true
           
+          # 4. Final Sultan compatibility fixes and Werror bypass
           patch -p1 < "../yapixel_patches/sultan/sys.c_fix.patch"
           echo "CFLAGS_open.o += -Wno-unused-variable -Wno-unused-but-set-variable" >> fs/Makefile
           echo "CFLAGS_stat.o += -Wno-incompatible-pointer-types" >> fs/Makefile
@@ -83,6 +94,7 @@ jobs:
       - name: Build Kernel
         run: |
           cd sultan
+          # Use O=out for clean building
           make CROSS_COMPILE=${{ env.TOOLCHAIN_PATH }} CC="${{ env.TOOLCHAIN_PATH }}gcc" -j$(nproc --all) O=out ${{ matrix.kernel.defconfig }}
           make CROSS_COMPILE=${{ env.TOOLCHAIN_PATH }} CC="${{ env.TOOLCHAIN_PATH }}gcc" -j$(nproc --all) O=out
 
@@ -95,5 +107,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.kernel.codename }}-Sultan-xxKSU-SUSFS
+          name: ${{ matrix.kernel.codename }}-Sultan-xxKSU-Final
           path: AK3/*
