@@ -73,18 +73,16 @@ jobs:
           cd "${{ env.kernel_dir }}"
           curl -LSs "https://raw.githubusercontent.com/${{ matrix.build.repo }}/${{ matrix.build.branch }}/kernel/setup.sh" | bash -s ${{ matrix.build.branch }}
 
-      - name: Setup Base Kernel Hooks
+      - name: Setup Kernel Configs
         run: |
           cd "${{ env.kernel_dir }}"
 
-          # Patch using YOUR synced scope patch - Added -F 3 for robustness
-          patch -p1 -F 3 < "${{ env.patch_dir }}/syscall_hook/scope-min-hooks-v1.9-sultan.patch"
-
-          # Use double quotes in sed to ensure $config_name expands correctly
-          configs="CONFIG_KSU=y CONFIG_TMPFS_XATTR=y CONFIG_TMPFS_POSIX_ACL=y CONFIG_IP_NF_TARGET_TTL=y CONFIG_IP6_NF_TARGET_HL=y CONFIG_IP6_NF_MATCH_HL=y CONFIG_TCP_CONG_BBR=y CONFIG_DEFAULT_BBR=y"
-
-          if [[ "${{ matrix.susfs }}" == "true" ]]; then
-            configs="$configs CONFIG_KSU_SUSFS=y CONFIG_KSU_SUSFS_SUS_PATH=y CONFIG_KSU_SUSFS_SUS_MOUNT=y CONFIG_KSU_SUSFS_SUS_KSTAT=y CONFIG_KSU_SUSFS_TRY_UMOUNT=y CONFIG_KSU_SUSFS_SPOOF_UNAME=y"
+          if [[ "${{ matrix.susfs }}" != "true" ]]; then
+            # Hookless mode for NoSUSFS — no kernel patching needed
+            configs="CONFIG_KSU=y CONFIG_KSU_KPROBES_HOOK=n CONFIG_KSU_TAMPER_SYSCALL_TABLE=y CONFIG_KSU_LSM_SECURITY_HOOKS=y CONFIG_KSU_EXTRAS=y CONFIG_KSU_ALLOWLIST_WORKAROUND=n CONFIG_KSU_DEBUG=n CONFIG_KSU_THRONE_TRACKER_ALWAYS_THREADED=y CONFIG_TMPFS_XATTR=y CONFIG_TMPFS_POSIX_ACL=y CONFIG_IP_NF_TARGET_TTL=y CONFIG_IP6_NF_TARGET_HL=y CONFIG_IP6_NF_MATCH_HL=y CONFIG_TCP_CONG_BBR=y CONFIG_DEFAULT_BBR=y"
+          else
+            # Normal hook mode for SUSFS — scope patch + De-inlined patch handle the hooks
+            configs="CONFIG_KSU=y CONFIG_TMPFS_XATTR=y CONFIG_TMPFS_POSIX_ACL=y CONFIG_IP_NF_TARGET_TTL=y CONFIG_IP6_NF_TARGET_HL=y CONFIG_IP6_NF_MATCH_HL=y CONFIG_TCP_CONG_BBR=y CONFIG_DEFAULT_BBR=y CONFIG_KSU_SUSFS=y CONFIG_KSU_SUSFS_SUS_PATH=y CONFIG_KSU_SUSFS_SUS_MOUNT=y CONFIG_KSU_SUSFS_SUS_KSTAT=y CONFIG_KSU_SUSFS_TRY_UMOUNT=y CONFIG_KSU_SUSFS_SPOOF_UNAME=y"
           fi
 
           for config in $configs; do
@@ -116,15 +114,19 @@ jobs:
           cp ${{ env.susfs_dir }}/kernel_patches/fs/* ${{ env.kernel_dir }}/fs/
           cp ${{ env.susfs_dir }}/kernel_patches/include/linux/* ${{ env.kernel_dir }}/include/linux/
 
-          # 2. Patch xxKSU folder with your De-inlined patch
+          # 2. Apply scope patch for exec/stat/open/reboot hooks
+          cd "${{ env.kernel_dir }}"
+          patch -p1 -F 3 < "${{ env.patch_dir }}/syscall_hook/scope-min-hooks-v1.9-sultan.patch"
+
+          # 3. Patch xxKSU folder with De-inlined patch
           cd "${{ env.kernel_dir }}/${{ matrix.build.folder }}"
           patch -p1 -F 3 < "${{ env.patch_dir }}/xxksu/0001-xxKSU-kernel-implement-susfs-v2.1.0-De-inlined.patch"
 
-          # 3. Patch main kernel tree
+          # 4. Patch main kernel tree
           cd "${{ env.kernel_dir }}"
           patch -p1 -F 3 < ${{ env.susfs_dir }}/kernel_patches/50_add_susfs_in_gki-${{ matrix.kernel.android_version }}-${{ matrix.kernel.kernel_version }}.patch || true
 
-          # 4. Final sys.c fix
+          # 5. Final sys.c fix
           patch -p1 -F 3 < "${{ env.patch_dir }}/sultan/sys.c_fix.patch"
 
       - name: Build Kernel
