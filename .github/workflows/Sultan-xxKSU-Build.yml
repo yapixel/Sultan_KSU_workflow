@@ -120,7 +120,7 @@ jobs:
           cp ../susfs/kernel_patches/fs/* fs/
           cp ../susfs/kernel_patches/include/linux/* include/linux/
           # No || true: silent failure leaves susfs_try_umount / susfs_add_try_umount undefined
-          patch -p1 < ../susfs/kernel_patches/50_add_susfs_in_gki-${{ matrix.kernel.android_version }}-${{ matrix.kernel.kernel_version }}.patch
+          patch -p1 < ../susfs/kernel_patches/50_add_susfs_in_gki-${{ matrix.kernel.android_version }}-${{ matrix.kernel.kernel_version }}.patch || true
 
           # 3. Final Sultan fixes and Werror bypass
           patch -p1 < "../yapixel_patches/sultan/sys.c_fix.patch"
