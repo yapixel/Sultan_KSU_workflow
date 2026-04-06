@@ -1,4 +1,4 @@
-name: Sultan-xxKSU-Build-Manual-Final
+name: Sultan-xxKSU-SUSFS-Final-Build
 
 permissions:
   contents: write
@@ -19,7 +19,6 @@ jobs:
             repo: "backslashxx/KernelSU"
             folder: "KernelSU"
             branch: "master"
-            ak3_suffix: "_xxKSU"
         kernel:
           - codename: gs201
             repo: "android_kernel_google_tensynos"
@@ -42,52 +41,51 @@ jobs:
           git clone --depth=1 https://github.com/kerneltoast/${{ matrix.kernel.repo }} sultan
           echo "kernel_dir=$PWD/sultan" >> $GITHUB_ENV
 
-      - name: Sync and Patch xxKSU
+      - name: Sync and Fix xxKSU Source
         run: |
           cd sultan
           curl -LSs "https://raw.githubusercontent.com/${{ matrix.build.repo }}/${{ matrix.build.branch }}/kernel/setup.sh" | bash -s ${{ matrix.build.branch }}
           
-          # Apply the De-inlined SUSFS patch to the xxKSU folder
-          cd ${{ matrix.build.folder }}
+          # 1. Apply De-inlined SUSFS patch to xxKSU folder
+          cd KernelSU
           patch -p1 < "../../yapixel_patches/xxksu/0001-xxKSU-kernel-implement-susfs-v2.1.0-De-inlined.patch"
           
-          # Force Manual Hook Definitions (Since Sultan removed Kprobes)
-          # We force the code to bypass Kprobes checks so it exports ksu_handle_... symbols
+          # 2. Force Manual Hook Definitions (Required for kernels without Kprobes)
+          # This ensures symbols like ksu_handle_execveat are defined statically
+          echo "CFLAGS_ksu.o += -DKSU_KPROBES_HOOK=0 -DKSU_MANUAL_HOOK=1" >> Makefile
           sed -i 's/defined(CONFIG_KSU_KPROBES_KSUD)/0/g' kernel/ksu.c || true
           sed -i 's/defined(CONFIG_KSU_KPROBES_KSUD)/0/g' kernel/ksud.c || true
+          sed -i 's/static int ksu_handle/int ksu_handle/g' kernel/ksu.c || true
 
-      - name: Setup No-Kprobes Configs
+      - name: Setup Kernel Configs
         run: |
           cd sultan
-          # Disable KPROBES_KSUD and enable LSM/SUSFS with Open Redirect
-          configs="CONFIG_KSU=y CONFIG_KSU_KPROBES_KSUD=n CONFIG_KSU_LSM_SECURITY_HOOKS=y CONFIG_KSU_SUSFS=y CONFIG_KSU_SUSFS_SUS_PATH=y CONFIG_KSU_SUSFS_SUS_MOUNT=y CONFIG_KSU_SUSFS_SUS_KSTAT=y CONFIG_KSU_SUSFS_TRY_UMOUNT=y CONFIG_KSU_SUSFS_SPOOF_UNAME=y CONFIG_KSU_SUSFS_OPEN_REDIRECT=y"
+          # Disable KPROBES to prevent linker GOT/PLT errors on Sultan's toolchain
+          configs="CONFIG_KSU=y CONFIG_KSU_KPROBES_HOOK=n CONFIG_KSU_KPROBES_KSUD=n CONFIG_KSU_LSM_SECURITY_HOOKS=y CONFIG_KSU_SUSFS=y CONFIG_KSU_SUSFS_SUS_PATH=y CONFIG_KSU_SUSFS_SUS_MOUNT=y CONFIG_KSU_SUSFS_SUS_KSTAT=y CONFIG_KSU_SUSFS_TRY_UMOUNT=y CONFIG_KSU_SUSFS_SPOOF_UNAME=y CONFIG_KSU_SUSFS_OPEN_REDIRECT=y"
           
           for config in $configs; do
             echo -e "\n${config}" >> "arch/arm64/configs/${{ matrix.kernel.defconfig }}"
           done
-          
-          # Strictly disable KPROBES to prevent linker GOT/PLT errors
           sed -i 's/CONFIG_KPROBES=y/# CONFIG_KPROBES is not set/' arch/arm64/configs/${{ matrix.kernel.defconfig }}
 
-      - name: Apply Kernel Source Hooks and Fixes
+      - name: Apply Kernel Source Patches
         run: |
           cd sultan
-          # 1. Copy SUSFS core headers and files
+          # 1. Apply Scope Manual Hook Patch (The reference you provided)
+          patch -p1 < ../yapixel_patches/syscall_hook/scope-min-hooks-v1.9-sultan.patch
+          
+          # 2. Copy SUSFS core files and apply SUSFS kernel patch
           cp ../susfs/kernel_patches/fs/* fs/
           cp ../susfs/kernel_patches/include/linux/* include/linux/
-          
-          # 2. Patch Kernel (Calls to ksu_handle_...)
           patch -p1 < ../susfs/kernel_patches/50_add_susfs_in_gki-${{ matrix.kernel.android_version }}-${{ matrix.kernel.kernel_version }}.patch || true
+          
+          # 3. Apply Sultan sys.c fix and bypass Werror for unused variables in open.c
           patch -p1 < "../yapixel_patches/sultan/sys.c_fix.patch"
-
-          # 3. FIX: Prevent "unused variable" errors in fs/open.c (Werror fix)
-          # Adds flags to ignore variables declared by the Open Redirect patch
           echo "CFLAGS_open.o += -Wno-unused-variable -Wno-unused-but-set-variable" >> fs/Makefile
 
       - name: Build Kernel
         run: |
           cd sultan
-          # Use O=out for a clean build directory
           make CROSS_COMPILE=${{ env.TOOLCHAIN_PATH }} CC="${{ env.TOOLCHAIN_PATH }}gcc" -j$(nproc --all) O=out ${{ matrix.kernel.defconfig }}
           make CROSS_COMPILE=${{ env.TOOLCHAIN_PATH }} CC="${{ env.TOOLCHAIN_PATH }}gcc" -j$(nproc --all) O=out
 
@@ -100,5 +98,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.kernel.codename }}-Sultan-xxKSU-Fixed
+          name: ${{ matrix.kernel.codename }}-Sultan-xxKSU-SUSFS
           path: AK3/*
