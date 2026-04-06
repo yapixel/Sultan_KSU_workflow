@@ -51,24 +51,6 @@ jobs:
           # 1. Apply De-inlined SUSFS patch
           patch -p1 < "../../yapixel_patches/xxksu/0001-xxKSU-kernel-implement-susfs-v2.1.0-De-inlined.patch"
 
-          # 2. De-staticize ksu_su_compat_enabled
-          sed -i 's/^static bool ksu_su_compat_enabled __read_mostly/bool ksu_su_compat_enabled __read_mostly/g' \
-            kernel/feature/sucompat.c
-
-          # 3. De-staticize ksu_handle_execveat
-          sed -i \
-            -e 's/^static int ksu_handle_execveat\b/int ksu_handle_execveat/g' \
-            kernel/feature/sucompat.c
-
-          # 4. Ensure LSM hooks path is always compiled in
-          for f in kernel/hook/core_hook.c kernel/hook/ksud.c kernel/ksu.c kernel/runtime/ksud.c; do
-            [ -f "$f" ] || continue
-            sed -i \
-              -e 's/defined(CONFIG_KSU_KPROBES_HOOK)/0/g' \
-              -e 's/defined(CONFIG_KSU_KPROBES_KSUD)/0/g' \
-              "$f"
-          done
-
       - name: Setup Kernel Configs
         run: |
           cd sultan
@@ -93,30 +75,7 @@ jobs:
       - name: Apply Kernel Source Patches and Fixes
         run: |
           cd sultan
-
-          # 1. Fix incompatible pointer type in fs/stat.c (GKI 6.1 Fix)
-          sed -i 's/const char \*\*filename_user/struct filename \*\*filename/g' fs/stat.c || true
-
-          # 2. PRE-CLEAN conflicted files BEFORE patching
-          # This removes existing hooks that cause the SUSFS 50-patch to fail on Sultan source
-          sed -i \
-            -e '/extern int ksu_handle_setresuid/d' \
-            -e '/(void)ksu_handle_setresuid/d' \
-            kernel/sys.c
-
-          sed -i \
-            -e '/extern int ksu_handle_devpts/d' \
-            -e '/ksu_handle_devpts(dentry->d_inode)/d' \
-            fs/devpts/inode.c
-
-          sed -i \
-            -e '/extern bool ksu_input_hook/d' \
-            -e '/extern.*ksu_handle_input_handle_event/d' \
-            -e '/if (unlikely(ksu_input_hook))/d' \
-            -e '/ksu_handle_input_handle_event/d' \
-            drivers/input/input.c
-
-          # 3. Apply SUSFS core files and patch with --fuzz to handle Sultan line offsets
+          # 1. Apply SUSFS core files and patch with --fuzz to handle Sultan line offsets
           cp ../susfs/kernel_patches/fs/* fs/
           cp ../susfs/kernel_patches/include/linux/* include/linux/
           patch -p1 --fuzz=3 < ../susfs/kernel_patches/50_add_susfs_in_gki-${{ matrix.kernel.android_version }}-${{ matrix.kernel.kernel_version }}.patch || true
@@ -124,8 +83,6 @@ jobs:
           # 4. Final Sultan fixes and Werror bypass
           patch -p1 < "../yapixel_patches/sultan/sys.c_fix.patch"
           patch -p1 < "../yapixel_patches/sultan/open.c_fix.patch"
-          echo "CFLAGS_open.o += -Wno-unused-variable -Wno-unused-but-set-variable" >> fs/Makefile
-          echo "CFLAGS_stat.o += -Wno-incompatible-pointer-types" >> fs/Makefile
 
       - name: Build Kernel
         run: |
