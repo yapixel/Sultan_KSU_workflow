@@ -46,12 +46,9 @@ jobs:
           cd sultan
           curl -LSs "https://raw.githubusercontent.com/${{ matrix.build.repo }}/${{ matrix.build.branch }}/kernel/setup.sh" | bash -s ${{ matrix.build.branch }}
           
-          # 1. Apply De-inlined SUSFS patch to xxKSU folder
           cd KernelSU
           patch -p1 < "../../yapixel_patches/xxksu/0001-xxKSU-kernel-implement-susfs-v2.1.0-De-inlined.patch"
           
-          # 2. Force Manual Hook Definitions (Required for kernels without Kprobes)
-          # This ensures symbols like ksu_handle_execveat are defined statically
           echo "CFLAGS_ksu.o += -DKSU_KPROBES_HOOK=0 -DKSU_MANUAL_HOOK=1" >> Makefile
           sed -i 's/defined(CONFIG_KSU_KPROBES_KSUD)/0/g' kernel/ksu.c || true
           sed -i 's/defined(CONFIG_KSU_KPROBES_KSUD)/0/g' kernel/ksud.c || true
@@ -60,7 +57,6 @@ jobs:
       - name: Setup Kernel Configs
         run: |
           cd sultan
-          # Disable KPROBES to prevent linker GOT/PLT errors on Sultan's toolchain
           configs="CONFIG_KSU=y CONFIG_KSU_KPROBES_HOOK=n CONFIG_KSU_KPROBES_KSUD=n CONFIG_KSU_LSM_SECURITY_HOOKS=y CONFIG_KSU_SUSFS=y CONFIG_KSU_SUSFS_SUS_PATH=y CONFIG_KSU_SUSFS_SUS_MOUNT=y CONFIG_KSU_SUSFS_SUS_KSTAT=y CONFIG_KSU_SUSFS_TRY_UMOUNT=y CONFIG_KSU_SUSFS_SPOOF_UNAME=y CONFIG_KSU_SUSFS_OPEN_REDIRECT=y"
           
           for config in $configs; do
@@ -71,17 +67,18 @@ jobs:
       - name: Apply Kernel Source Patches
         run: |
           cd sultan
-          # 1. Apply Scope Manual Hook Patch (The reference you provided)
           patch -p1 < ../yapixel_patches/syscall_hook/scope-min-hooks-v1.9-sultan.patch
           
-          # 2. Copy SUSFS core files and apply SUSFS kernel patch
+          # Fix incompatible pointer type for fs/stat.c in 6.1 GKI
+          sed -i 's/const char \*\*filename_user/struct filename \*\*filename/g' fs/stat.c
+          
           cp ../susfs/kernel_patches/fs/* fs/
           cp ../susfs/kernel_patches/include/linux/* include/linux/
           patch -p1 < ../susfs/kernel_patches/50_add_susfs_in_gki-${{ matrix.kernel.android_version }}-${{ matrix.kernel.kernel_version }}.patch || true
           
-          # 3. Apply Sultan sys.c fix and bypass Werror for unused variables in open.c
           patch -p1 < "../yapixel_patches/sultan/sys.c_fix.patch"
           echo "CFLAGS_open.o += -Wno-unused-variable -Wno-unused-but-set-variable" >> fs/Makefile
+          echo "CFLAGS_stat.o += -Wno-incompatible-pointer-types" >> fs/Makefile
 
       - name: Build Kernel
         run: |
