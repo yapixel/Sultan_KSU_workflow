@@ -1,4 +1,4 @@
-name: Sultan-xxKSU-Build-NoKprobes
+name: Sultan-xxKSU-Build-Manual-Final
 
 permissions:
   contents: write
@@ -42,46 +42,62 @@ jobs:
           git clone --depth=1 https://github.com/kerneltoast/${{ matrix.kernel.repo }} sultan
           echo "kernel_dir=$PWD/sultan" >> $GITHUB_ENV
 
-      - name: Sync xxKSU
+      - name: Sync and Patch xxKSU
         run: |
           cd sultan
           curl -LSs "https://raw.githubusercontent.com/${{ matrix.build.repo }}/${{ matrix.build.branch }}/kernel/setup.sh" | bash -s ${{ matrix.build.branch }}
+          
+          # Apply the De-inlined SUSFS patch to the xxKSU folder
+          cd ${{ matrix.build.folder }}
+          patch -p1 < "../../yapixel_patches/xxksu/0001-xxKSU-kernel-implement-susfs-v2.1.0-De-inlined.patch"
+          
+          # IMPORTANT: Since Kprobes are removed, we force the source to export manual hooks
+          # By replacing the KPROBE check with a constant 'false', we force manual definitions.
+          sed -i 's/defined(CONFIG_KSU_KPROBES_KSUD)/0/g' kernel/ksu.c || true
+          sed -i 's/defined(CONFIG_KSU_KPROBES_KSUD)/0/g' kernel/ksud.c || true
 
       - name: Setup No-Kprobes Configs
         run: |
           cd sultan
-          # Disable KPROBES and set KSU to manual hook mode
-          configs="CONFIG_KSU=y CONFIG_KSU_KPROBES_HOOK=n CONFIG_KSU_LSM_SECURITY_HOOKS=y CONFIG_KSU_SUSFS=y CONFIG_KSU_SUSFS_SUS_PATH=y CONFIG_KSU_SUSFS_SUS_MOUNT=y CONFIG_KSU_SUSFS_SUS_KSTAT=y CONFIG_KSU_SUSFS_TRY_UMOUNT=y CONFIG_KSU_SUSFS_SPOOF_UNAME=y"
+          # Based on your Kconfig: Disable KPROBES_KSUD and enable LSM/SUSFS
+          # We also set TAMPER_SYSCALL_TABLE to 'n' because we are using manual hooks in the source
+          configs="CONFIG_KSU=y CONFIG_KSU_KPROBES_KSUD=n CONFIG_KSU_LSM_SECURITY_HOOKS=y CONFIG_KSU_SUSFS=y CONFIG_KSU_SUSFS_SUS_PATH=y CONFIG_KSU_SUSFS_SUS_MOUNT=y CONFIG_KSU_SUSFS_SUS_KSTAT=y CONFIG_KSU_SUSFS_TRY_UMOUNT=y CONFIG_KSU_SUSFS_SPOOF_UNAME=y CONFIG_KSU_TAMPER_SYSCALL_TABLE=n"
           
           for config in $configs; do
             echo -e "\n${config}" >> "arch/arm64/configs/${{ matrix.kernel.defconfig }}"
           done
+          
+          # Force total disable of KPROBES at kernel level to avoid linker confusion
           sed -i 's/CONFIG_KPROBES=y/# CONFIG_KPROBES is not set/' arch/arm64/configs/${{ matrix.kernel.defconfig }}
 
-      - name: Apply SUSFS & xxKSU Patches
+      - name: Apply Kernel Source Hooks
         run: |
           cd sultan
-          # Copy SUSFS core
+          # 1. Copy SUSFS core headers and files
           cp ../susfs/kernel_patches/fs/* fs/
           cp ../susfs/kernel_patches/include/linux/* include/linux/
           
-          # Patch xxKSU (De-inlined)
-          cd ${{ matrix.build.folder }}
-          patch -p1 < "../../yapixel_patches/xxksu/0001-xxKSU-kernel-implement-susfs-v2.1.0-De-inlined.patch"
-          
-          # Patch Kernel (SUSFS Hooks)
-          cd ..
+          # 2. Patch Kernel (Provides the actual calls to ksu_handle_...)
           patch -p1 < ../susfs/kernel_patches/50_add_susfs_in_gki-${{ matrix.kernel.android_version }}-${{ matrix.kernel.kernel_version }}.patch || true
+          
+          # 3. Apply Sultan-specific compatibility fixes
           patch -p1 < "../yapixel_patches/sultan/sys.c_fix.patch"
 
       - name: Build Kernel
         run: |
           cd sultan
-          make CROSS_COMPILE=${{ env.TOOLCHAIN_PATH }} CC="${{ env.TOOLCHAIN_PATH }}gcc" -j$(nproc --all) ${{ matrix.kernel.defconfig }}
-          make CROSS_COMPILE=${{ env.TOOLCHAIN_PATH }} CC="${{ env.TOOLCHAIN_PATH }}gcc" -j$(nproc --all)
+          # Use O=out for a clean build to prevent stale object files
+          make CROSS_COMPILE=${{ env.TOOLCHAIN_PATH }} CC="${{ env.TOOLCHAIN_PATH }}gcc" -j$(nproc --all) O=out ${{ matrix.kernel.defconfig }}
+          make CROSS_COMPILE=${{ env.TOOLCHAIN_PATH }} CC="${{ env.TOOLCHAIN_PATH }}gcc" -j$(nproc --all) O=out
+
+      - name: Setup AnyKernel3
+        run: |
+          cd sultan/out
+          cp arch/arm64/boot/Image.lz4 ../../AK3/Image.lz4
+          cat google-devices/${{ matrix.kernel.codename }}/dts/*.dtb > ../../AK3/dtb
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.kernel.codename }}-Sultan-xxKSU
-          path: sultan/out/arch/arm64/boot/Image.lz4
+          name: ${{ matrix.kernel.codename }}-Sultan-xxKSU-Fixed
+          path: AK3/*
