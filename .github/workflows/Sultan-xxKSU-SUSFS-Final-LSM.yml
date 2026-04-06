@@ -126,7 +126,7 @@ jobs:
             drivers/input/input.c
 
           # 4. Final Sultan fixes and Werror bypass
-          patch -p1 < "../yapixel_patches/sultan/sys.c_fix.patch"
+          #patch -p1 < "../yapixel_patches/sultan/sys.c_fix.patch"
           patch -p1 < "../yapixel_patches/sultan/open.c_fix.patch"
           echo "CFLAGS_open.o += -Wno-unused-variable -Wno-unused-but-set-variable" >> fs/Makefile
           echo "CFLAGS_stat.o += -Wno-incompatible-pointer-types" >> fs/Makefile
