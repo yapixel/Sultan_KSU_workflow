@@ -101,7 +101,7 @@ jobs:
           # 2. Copy SUSFS core files and apply minimal Sultan-compatible SUSFS kernel patch
           cp ../susfs/kernel_patches/fs/* fs/
           cp ../susfs/kernel_patches/include/linux/* include/linux/
-          patch -p1 < ../susfs/kernel_patches/50_add_susfs_in_gki-${{ matrix.kernel.android_version }}-${{ matrix.kernel.kernel_version }}.patch
+          patch -p1 < ../susfs/kernel_patches/50_add_susfs_in_gki-${{ matrix.kernel.android_version }}-${{ matrix.kernel.kernel_version }}.patch ||true
 
           # 3. Remove 50-patch call sites for symbols absent in this xxKSU De-inlined version
           # ksu_handle_setresuid — injected into kernel/sys.c, not in this xxKSU
@@ -127,6 +127,7 @@ jobs:
 
           # 4. Final Sultan fixes and Werror bypass
           patch -p1 < "../yapixel_patches/sultan/sys.c_fix.patch"
+          patch -p1 < "../yapixel_patches/sultan/open.c_fix.patch"
           echo "CFLAGS_open.o += -Wno-unused-variable -Wno-unused-but-set-variable" >> fs/Makefile
           echo "CFLAGS_stat.o += -Wno-incompatible-pointer-types" >> fs/Makefile
 
