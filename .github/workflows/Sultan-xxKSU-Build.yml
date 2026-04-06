@@ -81,7 +81,7 @@ jobs:
           patch -p1 --fuzz=3 < ../susfs/kernel_patches/50_add_susfs_in_gki-${{ matrix.kernel.android_version }}-${{ matrix.kernel.kernel_version }}.patch || true
 
           # 4. Final Sultan fixes and Werror bypass
-          patch -p1 < "../yapixel_patches/sultan/sys.c_fix.patch"
+          #patch -p1 < "../yapixel_patches/sultan/sys.c_fix.patch"
           patch -p1 < "../yapixel_patches/sultan/open.c_fix.patch"
 
       - name: Build Kernel
