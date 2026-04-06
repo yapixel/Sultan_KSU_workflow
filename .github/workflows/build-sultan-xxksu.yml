@@ -58,17 +58,13 @@ jobs:
     outputs:
       sultan_tag:    ${{ steps.meta.outputs.sultan_tag }}
       ksu_ver:       ${{ steps.meta.outputs.ksu_ver }}
-      zip_name:      ${{ steps.package.outputs.zip_name }}
-      artifact_name: ${{ steps.package.outputs.artifact_name }}
 
     steps:
-      # -----------------------------------------------------------------------
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # -----------------------------------------------------------------------
       - name: Install GCC ${{ env.GCC_VERSION }} cross-compiler
         run: |
           wget -q "${{ env.GCC_ARCHIVE_URL }}" -O gcc.tar.gz
@@ -76,255 +72,140 @@ jobs:
           GCC_BIN="$PWD/gcc-${{ env.GCC_VERSION }}-nolibc/aarch64-linux/bin/aarch64-linux-"
           echo "GCC_PATH=${GCC_BIN}" >> "$GITHUB_ENV"
 
-      # -----------------------------------------------------------------------
       - name: Clone kernel source and dependencies
         run: |
           git clone --depth=1 "${{ matrix.kernel_repo }}" \
             -b "${{ matrix.kernel_branch }}" sultan
-
           git clone --depth=1 "${{ env.ANYKERNEL_REPO }}" \
             -b "${{ matrix.anykernel_branch }}" AK3
-
           git clone --depth=1 "${{ env.PATCHES_REPO }}" kernel_patches
           git clone --depth=1 "${{ env.SCRIPTS_REPO }}" sh
 
-      # -----------------------------------------------------------------------
-      - name: Collect build metadata (sultan tag, KSU version)
+      - name: Collect build metadata
         id: meta
         run: |
-          # Latest sultan release tag
           SULTAN_TAG=$(git -C sultan tag --sort=-committerdate | head -n1)
           if [[ -z "$SULTAN_TAG" ]]; then
             echo "::error::No tags found in the sultan repository."
             exit 1
           fi
-
-          # Latest xxKSU short commit hash
-          KSU_VER=$(./sh/get_ksuver.sh "backslashxx" "KernelSU" "${{ env.KSU_BRANCH }}" \
-            || echo "unknown")
-
+          KSU_VER=$(./sh/get_ksuver.sh "backslashxx" "KernelSU" "${{ env.KSU_BRANCH }}" || echo "unknown")
           echo "sultan_tag=${SULTAN_TAG}" >> "$GITHUB_OUTPUT"
           echo "ksu_ver=${KSU_VER}"       >> "$GITHUB_OUTPUT"
 
-          echo "Sultan tag : ${SULTAN_TAG}"
-          echo "xxKSU version : r${KSU_VER}"
-
-      # -----------------------------------------------------------------------
       - name: Configure defconfig
         working-directory: sultan
         run: |
           DEFCONFIG="arch/arm64/configs/${{ matrix.defconfig }}"
-
-          # ----- Networking / BBR / ipset configs ----------------------------
-          EXTRA_CONFIGS=(
-            CONFIG_TMPFS_XATTR=y
-            CONFIG_TMPFS_POSIX_ACL=y
-            CONFIG_IP_NF_TARGET_TTL=y
-            CONFIG_IP6_NF_TARGET_HL=y
-            CONFIG_IP6_NF_MATCH_HL=y
-            CONFIG_TCP_CONG_ADVANCED=y
-            CONFIG_TCP_CONG_BBR=y
-            CONFIG_NET_SCH_FQ=y
-            CONFIG_TCP_CONG_BIC=n
-            CONFIG_TCP_CONG_WESTWOOD=n
-            CONFIG_TCP_CONG_HTCP=n
-            CONFIG_DEFAULT_BBR=y
-            CONFIG_BPF_STREAM_PARSER=y
-            CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y
-            CONFIG_NETFILTER_XT_SET=y
-            CONFIG_IP_SET=y
-            CONFIG_IP_SET_MAX=65534
-            CONFIG_IP_SET_BITMAP_IP=y
-            CONFIG_IP_SET_BITMAP_IPMAC=y
-            CONFIG_IP_SET_BITMAP_PORT=y
-            CONFIG_IP_SET_HASH_IP=y
-            CONFIG_IP_SET_HASH_IPMARK=y
-            CONFIG_IP_SET_HASH_IPPORT=y
-            CONFIG_IP_SET_HASH_IPPORTIP=y
-            CONFIG_IP_SET_HASH_IPPORTNET=y
-            CONFIG_IP_SET_HASH_IPMAC=y
-            CONFIG_IP_SET_HASH_MAC=y
-            CONFIG_IP_SET_HASH_NETPORTNET=y
-            CONFIG_IP_SET_HASH_NET=y
-            CONFIG_IP_SET_HASH_NETNET=y
-            CONFIG_IP_SET_HASH_NETPORT=y
-            CONFIG_IP_SET_HASH_NETIFACE=y
-            CONFIG_IP_SET_LIST_SET=y
-            CONFIG_NETFILTER_XT_TARGET_TPROXY=y
-            CONFIG_NETFILTER_XT_TARGET_REDIRECT=y
-            CONFIG_NETFILTER_XT_MATCH_SOCKET=y
-            CONFIG_NETFILTER_XT_MATCH_MARK=y
-            CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y
-            CONFIG_NETFILTER_XT_MATCH_IPRANGE=y
-            CONFIG_NETFILTER_XT_MATCH_OWNER=y
-            CONFIG_NETFILTER_XT_MATCH_MAC=y
-            CONFIG_NETFILTER_XT_MATCH_CONNTRACK=y
-            CONFIG_NETFILTER_XT_MARK=y
-            CONFIG_NETFILTER_XT_CONNMARK=y
-            CONFIG_NETFILTER_XT_TARGET_CONNMARK=y
-            CONFIG_IP6_NF_NAT=y
-            CONFIG_IP6_NF_TARGET_REDIRECT=y
-            CONFIG_IP6_NF_TARGET_MASQUERADE=y
-           EOF
-          )
-
-          for cfg in "${EXTRA_CONFIGS[@]}"; do
-            key="${cfg%%=*}"
-            sed -i -E "s/.*${key}=.*$/# ${key} removed by CI/g" "$DEFCONFIG"
-            echo "$cfg" >> "$DEFCONFIG"
-          done
-
-          # ----- KernelSU configs --------------------------------------------
+          # Apply configs
           cat >> "$DEFCONFIG" << 'EOF'
+          CONFIG_TMPFS_XATTR=y
+          CONFIG_TMPFS_POSIX_ACL=y
+          CONFIG_IP_NF_TARGET_TTL=y
+          CONFIG_IP6_NF_TARGET_HL=y
+          CONFIG_IP6_NF_MATCH_HL=y
+          CONFIG_TCP_CONG_ADVANCED=y
+          CONFIG_TCP_CONG_BBR=y
+          CONFIG_NET_SCH_FQ=y
+          CONFIG_DEFAULT_BBR=y
           CONFIG_KSU=y
           CONFIG_KSU_EXTRAS=y
-          CONFIG_KSU_ALLOWLIST_WORKAROUND=n
-          CONFIG_KSU_DEBUG=n
-          CONFIG_KSU_KPROBES_HOOK=n
           CONFIG_KSU_TAMPER_SYSCALL_TABLE=y
           CONFIG_KSU_LSM_SECURITY_HOOKS=y
           CONFIG_KSU_THRONE_TRACKER_ALWAYS_THREADED=y
           EOF
 
-      # -----------------------------------------------------------------------
       - name: Apply build-reproducibility patches
         working-directory: sultan
         run: |
-          PATCHES=(
-            ../kernel_patches/sultan/60_scripts_mkcompile_h.patch
-            ../kernel_patches/sultan/61_scripts_setlocalversion.patch
-            ../kernel_patches/sultan/62_init_Makefile.patch
-          )
+          patch -p1 < ../kernel_patches/sultan/60_scripts_mkcompile_h.patch
+          patch -p1 < ../kernel_patches/sultan/61_scripts_setlocalversion.patch
+          patch -p1 < ../kernel_patches/sultan/62_init_Makefile.patch
 
-          for patch in "${PATCHES[@]}"; do
-            echo "Applying patch: $(basename "$patch")"
-            patch -p1 < "$patch"
-          done
-
-      # -----------------------------------------------------------------------
       - name: Integrate xxKSU
         working-directory: sultan
         run: |
-          curl -LSs \
-            "https://raw.githubusercontent.com/${{ env.KSU_REPO }}/${{ env.KSU_BRANCH }}/kernel/setup.sh" \
-            | bash -s -- "${{ env.KSU_BRANCH }}"
+          curl -LSs "https://raw.githubusercontent.com/${{ env.KSU_REPO }}/${{ env.KSU_BRANCH }}/kernel/setup.sh" | bash -s -- "${{ env.KSU_BRANCH }}"
 
-      # -----------------------------------------------------------------------
       - name: Build kernel
         working-directory: sultan
         env:
-          KBUILD_BUILD_USER: build-user
-          KBUILD_BUILD_HOST: build-host
           CROSS_COMPILE: ${{ env.GCC_PATH }}
           CC: ${{ env.GCC_PATH }}gcc
+          KBUILD_BUILD_USER: build-user
+          KBUILD_BUILD_HOST: build-host
         run: |
-          make O=out \
-            CROSS_COMPILE="$CROSS_COMPILE" \
-            CC="$CC" \
-            ${{ matrix.defconfig }}
+          make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" ${{ matrix.defconfig }}
+          make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" -j"$(nproc --all)"
 
-          make O=out \
-            CROSS_COMPILE="$CROSS_COMPILE" \
-            CC="$CC" \
-            -j"$(nproc --all)"
-
-      # -----------------------------------------------------------------------
-      - name: Package AnyKernel3 flashable ZIP
+      - name: Package AnyKernel3
         id: package
         run: |
           cp sultan/out/arch/arm64/boot/Image.lz4 AK3/Image.lz4
           cat sultan/out/${{ matrix.dtb_path }}/*.dtb > AK3/dtb
-
-          SULTAN_TAG="${{ steps.meta.outputs.sultan_tag }}"
-          KSU_VER="${{ steps.meta.outputs.ksu_ver }}"
-          ZIP_NAME="Sultan-${{ matrix.codename }}-${SULTAN_TAG}-xxKSU-r${KSU_VER}.zip"
-          ARTIFACT_NAME="Sultan-${{ matrix.codename }}-${SULTAN_TAG}-xxKSU-r${KSU_VER}"
-
+          ZIP_NAME="Sultan-${{ matrix.codename }}-${{ steps.meta.outputs.sultan_tag }}-xxKSU-r${{ steps.meta.outputs.ksu_ver }}.zip"
           ( cd AK3 && zip -r9 "../${ZIP_NAME}" . -x "*.git*" "README.md" )
-
-          echo "zip_name=${ZIP_NAME}"           >> "$GITHUB_OUTPUT"
-          echo "artifact_name=${ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
           echo "ZIP_PATH=$GITHUB_WORKSPACE/${ZIP_NAME}" >> "$GITHUB_ENV"
 
-      # -----------------------------------------------------------------------
-      - name: Upload kernel ZIP as artifact
-        uses: actions/upload-artifact@v7
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.package.outputs.artifact_name }}
+          name: Sultan-${{ matrix.codename }}-${{ steps.meta.outputs.sultan_tag }}
           path: ${{ env.ZIP_PATH }}
 
 # ---------------------------------------------------------------------------
-# Job 2: Create a GitHub Release from the built artifact
+# Job 2: Create a GitHub Release
 # ---------------------------------------------------------------------------
   release:
     name: Create GitHub Release
     needs: build
     runs-on: ubuntu-latest
-
     permissions:
       contents: write
 
     steps:
-      # -----------------------------------------------------------------------
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
-      # -----------------------------------------------------------------------
       - name: Download build artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v4
         with:
           path: ./artifacts
 
-      # -----------------------------------------------------------------------
       - name: Generate unique release tag
         id: tag
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           BASE_TAG="$(date +"%Y.%m.%d")"
-
-          ALL_TAGS=$(gh api "repos/${{ github.repository }}/tags" \
-            --paginate --jq '.[].name' 2>/dev/null || true)
-
+          ALL_TAGS=$(gh api "repos/${{ github.repository }}/tags" --paginate --jq '.[].name' || true)
+          
           MAX_REV=0
           while IFS= read -r tag; do
             if [[ "$tag" == "${BASE_TAG}-r"* ]]; then
               REV="${tag##*-r}"
-              (( REV > MAX_REV )) && MAX_REV="$REV"
+              if [[ "$REV" =~ ^[0-9]+$ ]]; then
+                (( REV > MAX_REV )) && MAX_REV="$REV"
+              fi
             fi
           done <<< "$ALL_TAGS"
 
           NEXT_REV=$(( MAX_REV + 1 ))
           RELEASE_TAG="${BASE_TAG}-r${NEXT_REV}"
-
-          echo "Resolved tag: ${RELEASE_TAG}  (previous max: r${MAX_REV})"
-
-          gh api "repos/${{ github.repository }}/git/refs" \
-            -X POST \
-            -f "ref=refs/tags/${RELEASE_TAG}" \
-            -f "sha=${{ github.sha }}" || {
-              echo "::error::Tag creation failed — '${RELEASE_TAG}' may already exist."
-              exit 1
-            }
-
           echo "RELEASE_TAG=${RELEASE_TAG}" >> "$GITHUB_ENV"
 
-      # -----------------------------------------------------------------------
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2.6.1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
           name: Kernel Build — ${{ env.RELEASE_TAG }}
           body: |
             ## Kernel Build Details
-
-            | Field   | Value |
-            |---------|-------|
-            | Manager | [backslashxx/KernelSU](https://github.com/backslashxx/KernelSU) |
-            | Variant | Sultan (GCC) + xxKSU |
-            | Sultan  | [${{ needs.build.outputs.sultan_tag }}](https://github.com/kerneltoast/android_kernel_google_tensynos/releases/tag/${{ needs.build.outputs.sultan_tag }}) |
-            | xxKSU   | `r${{ needs.build.outputs.ksu_ver }}` |
-            | Date    | ${{ env.RELEASE_TAG }} |
-
-            > Built automatically via GitHub Actions.
+            | Field | Value |
+            |-------|-------|
+            | Sultan Tag | ${{ needs.build.outputs.sultan_tag }} |
+            | xxKSU Rev | r${{ needs.build.outputs.ksu_ver }} |
           files: artifacts/**/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
