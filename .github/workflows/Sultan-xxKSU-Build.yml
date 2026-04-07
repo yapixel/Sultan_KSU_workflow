@@ -44,113 +44,65 @@ jobs:
         run: |
           cd sultan
           curl -LSs "https://raw.githubusercontent.com/backslashxx/KernelSU/master/kernel/setup.sh" | bash -s ${{ matrix.build.branch }}
-
           cd KernelSU
-          # Apply the De-inlined SUSFS v2.1.0 patch
           patch -p1 < "../../yapixel_patches/xxksu/0001-xxKSU-kernel-implement-susfs-v2.1.0-De-inlined.patch"
 
       - name: Setup Kernel Configs
         run: |
           cd sultan
           configs="CONFIG_KSU=y \
-                   CONFIG_KSU_KPROBES_HOOK=n \
-                   CONFIG_KSU_KPROBES_KSUD=n \
                    CONFIG_KSU_LSM_SECURITY_HOOKS=y \
                    CONFIG_KSU_SUSFS=y \
                    CONFIG_KSU_SUSFS_SUS_PATH=y \
                    CONFIG_KSU_SUSFS_SUS_MOUNT=y \
                    CONFIG_KSU_SUSFS_SUS_KSTAT=y \
-                   CONFIG_KSU_SUSFS_TRY_UMOUNT=n \
                    CONFIG_KSU_SUSFS_SPOOF_UNAME=y \
                    CONFIG_KSU_SUSFS_OPEN_REDIRECT=y \
-                   CONFIG_KSU_DEBUG=y \
                    CONFIG_WERROR=n \
                    CONFIG_TMPFS_XATTR=y \
-                   CONFIG_TMPFS_POSIX_ACL=y \
-                   CONFIG_IP_NF_TARGET_TTL=y \
-                   CONFIG_IP6_NF_TARGET_HL=y \
-                   CONFIG_IP6_NF_MATCH_HL=y \
-                   CONFIG_TCP_CONG_ADVANCED=y \
-                   CONFIG_TCP_CONG_BBR=y \
-                   CONFIG_NET_SCH_FQ=y \
-                   CONFIG_IP_SET=y \
-                   CONFIG_NETFILTER_XT_SET=y \
-                   CONFIG_IP_SET_MAX=65534 \
-                   CONFIG_IP_SET_BITMAP_IP=y \
-                   CONFIG_IP_SET_BITMAP_IPMAC=y \
-                   CONFIG_IP_SET_BITMAP_PORT=y \
-                   CONFIG_IP_SET_HASH_IP=y \
-                   CONFIG_IP_SET_HASH_IPMARK=y \
-                   CONFIG_IP_SET_HASH_IPPORT=y \
-                   CONFIG_IP_SET_HASH_IPPORTIP=y \
-                   CONFIG_IP_SET_HASH_IPPORTNET=y \
-                   CONFIG_IP_SET_HASH_IPMAC=y \
-                   CONFIG_IP_SET_HASH_MAC=y \
-                   CONFIG_IP_SET_HASH_NETPORTNET=y \
-                   CONFIG_IP_SET_HASH_NET=y \
-                   CONFIG_IP_SET_HASH_NETNET=y \
-                   CONFIG_IP_SET_HASH_NETPORT=y \
-                   CONFIG_IP_SET_HASH_NETIFACE=y \
-                   CONFIG_IP_SET_LIST_SET=y \
-                   CONFIG_NETFILTER_XT_TARGET_TPROXY=y \
-                   CONFIG_NETFILTER_XT_TARGET_REDIRECT=y \
-                   CONFIG_NETFILTER_XT_MATCH_SOCKET=y \
-                   CONFIG_NETFILTER_XT_MATCH_MARK=y \
-                   CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y \
-                   CONFIG_NETFILTER_XT_MATCH_IPRANGE=y \
-                   CONFIG_NETFILTER_XT_MATCH_OWNER=y \
-                   CONFIG_NETFILTER_XT_MATCH_MAC=y \
-                   CONFIG_NETFILTER_XT_MATCH_CONNTRACK=y \
-                   CONFIG_NETFILTER_XT_MARK=y \
-                   CONFIG_NETFILTER_XT_CONNMARK=y \
-                   CONFIG_NETFILTER_XT_TARGET_CONNMARK=y \
-                   CONFIG_IP6_NF_NAT=y \
-                   CONFIG_IP6_NF_TARGET_REDIRECT=y"
+                   CONFIG_TMPFS_POSIX_ACL=y"
 
           for config in $configs; do
             echo -e "\n${config}" >> "arch/arm64/configs/${{ matrix.kernel.defconfig }}"
           done
 
-          # Force KPROBES OFF (Sultan requirement)
+          # Force KPROBES OFF for Sultan compatibility
           sed -i 's/CONFIG_KPROBES=y/# CONFIG_KPROBES is not set/' arch/arm64/configs/${{ matrix.kernel.defconfig }}
           sed -i '/CONFIG_KPROBES/d' arch/arm64/configs/${{ matrix.kernel.defconfig }}
 
-      - name: Debug Sultan pre-existing hooks
-        run: |
-         echo "=== ksu_init_rc_hook in sultan source ==="
-         grep -rn "ksu_init_rc_hook" sultan/fs/ sultan/kernel/ || true
-         echo "=== ksu_handle_sys_read in sultan source ==="
-         grep -rn "ksu_handle_sys_read" sultan/fs/ sultan/kernel/ || true
-         echo "=== ksu_handle_vfs_fstat in sultan source ==="
-         grep -rn "ksu_handle_vfs_fstat" sultan/fs/ sultan/kernel/ || true
-         echo "=== ksu_handle_setresuid in sultan source (pre-patch) ==="
-         grep -rn "ksu_handle_setresuid" sultan/kernel/sys.c || true
-         echo "=== ksu_handle_devpts in sultan source (pre-patch) ==="
-         grep -rn "ksu_handle_devpts" sultan/fs/devpts/ || true
-
-      - name: Apply Kernel Source Patches and Fixes
+      - name: Linker & Modular Source Fixups
         run: |
           cd sultan
-
-          # Copy SUSFS core files
+          
+          # 1. Patch the 50-patch SUSFS core files into the kernel
           cp ../susfs/kernel_patches/fs/* fs/ || true
           cp ../susfs/kernel_patches/include/linux/* include/linux/ || true
-
-          # Apply the big SUSFS base integration patch (high fuzz for Sultan offsets)
           patch -p1 --fuzz=6 < ../susfs/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch || true
-          
-          # FIXED: Ensure the De-inlined 'kernel/' subdir is built by KernelSU's Makefile
-          if ! grep -q "obj-y += kernel/" KernelSU/Makefile 2>/dev/null; then
-            echo "obj-y += kernel/" >> KernelSU/Makefile || true
+
+          # 2. Fix Makefile to include de-inlined runtime/ directory
+          # This ensures the logic for hooks is actually compiled
+          if [ -f KernelSU/kernel/Makefile ]; then
+            sed -i 's/obj-$(CONFIG_KSU) := ksu.o/obj-$(CONFIG_KSU) := ksu.o runtime\/ksud.o/g' KernelSU/kernel/Makefile
           fi
 
-      - name: De-inlined + No-KPROBES Compatibility Fixes
-        run: |
-          cd sultan
-          
-          # Safely convert -Werror=flag to -Wflag, and remove standalone -Werror
-          sed -i 's/-Werror=/-W/g' Makefile arch/arm64/Makefile 2>/dev/null || true
-          sed -i 's/ -Werror / /g' Makefile arch/arm64/Makefile 2>/dev/null || true
+          # 3. Fix Visibility (static -> global) in ksud.h
+          # This allows the 'extern' calls in the 50-patch to link to KSU functions
+          if [ -f KernelSU/kernel/runtime/ksud.h ]; then
+            sed -i 's/static noinline/noinline/g' KernelSU/kernel/runtime/ksud.h
+            
+            # Inject missing SUSFS expected prototypes
+            cat <<EOF >> KernelSU/kernel/runtime/ksud.h
+extern void ksu_handle_sys_read(unsigned int fd);
+extern int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid);
+extern void ksu_handle_vfs_fstat(int fd, loff_t *kstat_size_ptr);
+EOF
+          fi
+
+          # 4. Fix Relocation Errors (Unexpected GOT/PLT)
+          # Sultan LTO requires attributes to match between declaration and definition
+          find KernelSU/kernel -name "*.c" -exec sed -i 's/bool ksu_execveat_hook/bool ksu_execveat_hook __read_mostly/g' {} +
+          find KernelSU/kernel -name "*.h" -exec sed -i 's/bool ksu_execveat_hook/bool ksu_execveat_hook __read_mostly/g' {} +
+          find KernelSU/kernel -name "*.c" -exec sed -i 's/bool ksu_su_compat_enabled/bool ksu_su_compat_enabled __read_mostly/g' {} +
 
       - name: Build kernel
         working-directory: sultan
@@ -171,7 +123,6 @@ jobs:
           elif [ -f arch/arm64/boot/Image ]; then
             cp arch/arm64/boot/Image ../../AK3/Image
           fi
-          # Combine dtbs if present
           find . -name "*.dtb" -exec cat {} + > ../../AK3/dtb || true
 
       - name: Upload Artifact
