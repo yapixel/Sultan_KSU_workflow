@@ -63,10 +63,10 @@ jobs:
                    CONFIG_KSU_SUSFS_TRY_UMOUNT=n \
                    CONFIG_KSU_SUSFS_SPOOF_UNAME=y \
                    CONFIG_KSU_SUSFS_OPEN_REDIRECT=y \
-                   CONFIG_KSU_DEBUG=y"
+                   CONFIG_KSU_DEBUG=y \
+                   CONFIG_WERROR=n"
 
           for config in $configs; do
-            # FIXED: Corrected bash variable syntax
             echo -e "\n${config}" >> "arch/arm64/configs/${{ matrix.kernel.defconfig }}"
           done
 
@@ -97,8 +97,10 @@ jobs:
       - name: De-inlined + No-KPROBES Compatibility Fixes
         run: |
           cd sultan
-          # Bypass Werror (common with de-inlined + custom kernels)
-          sed -i 's/-Werror//g' Makefile arch/arm64/Makefile 2>/dev/null || true
+          
+          # Safely convert -Werror=flag to -Wflag, and remove standalone -Werror
+          sed -i 's/-Werror=/-W/g' Makefile arch/arm64/Makefile 2>/dev/null || true
+          sed -i 's/ -Werror / /g' Makefile arch/arm64/Makefile 2>/dev/null || true
 
           # Extra safety for de-inlined mode on no-kprobes kernel
           echo "obj-y += KernelSU/" >> Makefile || true
@@ -107,16 +109,13 @@ jobs:
       - name: Build kernel
         working-directory: sultan
         env:
-          # FIXED: Changed GCC_PATH to TOOLCHAIN_PATH to match your setup step
           CROSS_COMPILE: ${{ env.TOOLCHAIN_PATH }}
           CC: ${{ env.TOOLCHAIN_PATH }}gcc
           KBUILD_BUILD_USER: build-user
           KBUILD_BUILD_HOST: build-host
         run: |
-          # FIXED: Changed matrix.defconfig to matrix.kernel.defconfig
           make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" ${{ matrix.kernel.defconfig }}
           make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" -j"$(nproc --all)"
-
 
       - name: Setup AnyKernel3
         run: |
