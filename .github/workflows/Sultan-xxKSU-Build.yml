@@ -115,6 +115,19 @@ jobs:
           sed -i 's/CONFIG_KPROBES=y/# CONFIG_KPROBES is not set/' arch/arm64/configs/${{ matrix.kernel.defconfig }}
           sed -i '/CONFIG_KPROBES/d' arch/arm64/configs/${{ matrix.kernel.defconfig }}
 
+      - name: Debug Sultan pre-existing hooks
+        run: |
+         echo "=== ksu_init_rc_hook in sultan source ==="
+         grep -rn "ksu_init_rc_hook" sultan/fs/ sultan/kernel/ || true
+         echo "=== ksu_handle_sys_read in sultan source ==="
+         grep -rn "ksu_handle_sys_read" sultan/fs/ sultan/kernel/ || true
+         echo "=== ksu_handle_vfs_fstat in sultan source ==="
+         grep -rn "ksu_handle_vfs_fstat" sultan/fs/ sultan/kernel/ || true
+         echo "=== ksu_handle_setresuid in sultan source (pre-patch) ==="
+         grep -rn "ksu_handle_setresuid" sultan/kernel/sys.c || true
+         echo "=== ksu_handle_devpts in sultan source (pre-patch) ==="
+         grep -rn "ksu_handle_devpts" sultan/fs/devpts/ || true
+
       - name: Apply Kernel Source Patches and Fixes
         run: |
           cd sultan
