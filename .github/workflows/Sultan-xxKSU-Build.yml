@@ -103,11 +103,17 @@ jobs:
           echo "obj-y += KernelSU/" >> Makefile || true
           echo "obj-y += KernelSU/kernel/" >> Makefile || true
 
-      - name: Build Kernel
+      - name: Build kernel
+        working-directory: sultan
+        env:
+          CROSS_COMPILE: ${{ env.GCC_PATH }}
+          CC: ${{ env.GCC_PATH }}gcc
+          KBUILD_BUILD_USER: build-user
+          KBUILD_BUILD_HOST: build-host
         run: |
-          cd sultan
-          make CROSS_COMPILE=\( {{ env.TOOLCHAIN_PATH }} CC=" \){{ env.TOOLCHAIN_PATH }}gcc" -j$(nproc --all) O=out ${{ matrix.kernel.defconfig }}
-          make CROSS_COMPILE=\( {{ env.TOOLCHAIN_PATH }} CC=" \){{ env.TOOLCHAIN_PATH }}gcc" -j$(nproc --all) O=out
+          make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" ${{ matrix.defconfig }}
+          make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" -j"$(nproc --all)"
+
 
       - name: Setup AnyKernel3
         run: |
