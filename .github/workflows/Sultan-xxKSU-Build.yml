@@ -107,12 +107,14 @@ jobs:
       - name: Build kernel
         working-directory: sultan
         env:
-          CROSS_COMPILE: ${{ env.GCC_PATH }}
-          CC: ${{ env.GCC_PATH }}gcc
+          # FIXED: Changed GCC_PATH to TOOLCHAIN_PATH to match your setup step
+          CROSS_COMPILE: ${{ env.TOOLCHAIN_PATH }}
+          CC: ${{ env.TOOLCHAIN_PATH }}gcc
           KBUILD_BUILD_USER: build-user
           KBUILD_BUILD_HOST: build-host
         run: |
-          make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" ${{ matrix.defconfig }}
+          # FIXED: Changed matrix.defconfig to matrix.kernel.defconfig
+          make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" ${{ matrix.kernel.defconfig }}
           make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" -j"$(nproc --all)"
 
 
