@@ -82,11 +82,8 @@ jobs:
           cp ../susfs/kernel_patches/include/linux/* include/linux/ || true
 
           # Apply the big SUSFS base integration patch (high fuzz for Sultan offsets)
-          patch -p1 --fuzz=6 < ../susfs/kernel_patches/50_add_susfs_in_gki-\( {{ matrix.kernel.android_version }}- \){{ matrix.kernel.kernel_version }}.patch || true
+          patch -p1 --fuzz=6 < ../susfs/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch || true
 
-          # Sultan-specific fixes (uncommented - often required with de-inlined)
-          patch -p1 < ../yapixel_patches/sultan/open.c_fix.patch || true
-          # patch -p1 < ../yapixel_patches/sultan/sys.c_fix.patch || true   # if needed later
 
           # Critical: Ensure KernelSU (including de-inlined kernel/ subdir) is linked
           if ! grep -q "obj-y += KernelSU/" Makefile; then
