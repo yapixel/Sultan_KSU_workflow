@@ -84,11 +84,6 @@ jobs:
 
           # Apply the big SUSFS base integration patch (high fuzz for Sultan offsets)
           patch -p1 --fuzz=6 < ../susfs/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch || true
-
-          # FIXED: Correctly link KernelSU into the Linux build system via drivers/Makefile
-          if ! grep -q "KernelSU" drivers/Makefile; then
-            echo "obj-y += ../KernelSU/" >> drivers/Makefile
-          fi
           
           # FIXED: Ensure the De-inlined 'kernel/' subdir is built by KernelSU's Makefile
           if ! grep -q "obj-y += kernel/" KernelSU/Makefile 2>/dev/null; then
@@ -102,20 +97,6 @@ jobs:
           # Safely convert -Werror=flag to -Wflag, and remove standalone -Werror
           sed -i 's/-Werror=/-W/g' Makefile arch/arm64/Makefile 2>/dev/null || true
           sed -i 's/ -Werror / /g' Makefile arch/arm64/Makefile 2>/dev/null || true
-          
-          # (Removed the invalid root Makefile modifications from here)
-
-      - name: De-inlined + No-KPROBES Compatibility Fixes
-        run: |
-          cd sultan
-          
-          # Safely convert -Werror=flag to -Wflag, and remove standalone -Werror
-          sed -i 's/-Werror=/-W/g' Makefile arch/arm64/Makefile 2>/dev/null || true
-          sed -i 's/ -Werror / /g' Makefile arch/arm64/Makefile 2>/dev/null || true
-
-          # Extra safety for de-inlined mode on no-kprobes kernel
-          echo "obj-y += KernelSU/" >> Makefile || true
-          echo "obj-y += KernelSU/kernel/" >> Makefile || true
 
       - name: Build kernel
         working-directory: sultan
