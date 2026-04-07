@@ -66,7 +66,7 @@ jobs:
             echo -e "\n${config}" >> "arch/arm64/configs/${{ matrix.kernel.defconfig }}"
           done
 
-          # Force KPROBES OFF for Sultan compatibility
+          # Sultan optimization: KPROBES break things here
           sed -i 's/CONFIG_KPROBES=y/# CONFIG_KPROBES is not set/' arch/arm64/configs/${{ matrix.kernel.defconfig }}
           sed -i '/CONFIG_KPROBES/d' arch/arm64/configs/${{ matrix.kernel.defconfig }}
 
@@ -74,35 +74,37 @@ jobs:
         run: |
           cd sultan
           
-          # 1. Patch the 50-patch SUSFS core files into the kernel
+          # 1. Apply SUSFS Base Patch
           cp ../susfs/kernel_patches/fs/* fs/ || true
           cp ../susfs/kernel_patches/include/linux/* include/linux/ || true
           patch -p1 --fuzz=6 < ../susfs/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch || true
 
-          # 2. Fix Makefile to include de-inlined runtime/ directory
-          # This ensures the logic for hooks is actually compiled
+          # 2. Update Makefiles for De-inlined Build
+          # Force inclusion of the kernel and runtime subdirectories
+          if [ -f KernelSU/Makefile ]; then
+            sed -i '/obj-y += kernel\//d' KernelSU/Makefile
+            echo "obj-y += kernel/" >> KernelSU/Makefile
+          fi
+          
           if [ -f KernelSU/kernel/Makefile ]; then
+            # Ensure runtime/ksud.o is part of the build
             sed -i 's/obj-$(CONFIG_KSU) := ksu.o/obj-$(CONFIG_KSU) := ksu.o runtime\/ksud.o/g' KernelSU/kernel/Makefile
           fi
 
-          # 3. Fix Visibility (static -> global) in ksud.h
-          # This allows the 'extern' calls in the 50-patch to link to KSU functions
-          if [ -f KernelSU/kernel/runtime/ksud.h ]; then
-            sed -i 's/static noinline/noinline/g' KernelSU/kernel/runtime/ksud.h
-            
-            # Inject missing SUSFS expected prototypes
-            cat <<EOF >> KernelSU/kernel/runtime/ksud.h
-            extern void ksu_handle_sys_read(unsigned int fd);
-            extern int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid);
-            extern void ksu_handle_vfs_fstat(int fd, loff_t *kstat_size_ptr);
-            EOF
+          # 3. Fix Visibility (static -> global)
+          # We use a temp file to avoid Here-Doc indentation errors
+          KSUD_H="KernelSU/kernel/runtime/ksud.h"
+          if [ -f "$KSUD_H" ]; then
+            sed -i 's/static noinline/noinline/g' "$KSUD_H"
+            echo "/* SUSFS Linker Prototypes */" >> "$KSUD_H"
+            echo "extern void ksu_handle_sys_read(unsigned int fd);" >> "$KSUD_H"
+            echo "extern int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid);" >> "$KSUD_H"
+            echo "extern void ksu_handle_vfs_fstat(int fd, loff_t *kstat_size_ptr);" >> "$KSUD_H"
           fi
 
-          # 4. Fix Relocation Errors (Unexpected GOT/PLT)
-          # Sultan LTO requires attributes to match between declaration and definition
-          find KernelSU/kernel -name "*.c" -exec sed -i 's/bool ksu_execveat_hook/bool ksu_execveat_hook __read_mostly/g' {} +
-          find KernelSU/kernel -name "*.h" -exec sed -i 's/bool ksu_execveat_hook/bool ksu_execveat_hook __read_mostly/g' {} +
-          find KernelSU/kernel -name "*.c" -exec sed -i 's/bool ksu_su_compat_enabled/bool ksu_su_compat_enabled __read_mostly/g' {} +
+          # 4. Global Variable Section Alignment for Sultan LTO
+          find KernelSU/kernel -name "*.c" -o -name "*.h" | xargs sed -i 's/bool ksu_execveat_hook/bool ksu_execveat_hook __read_mostly/g' || true
+          find KernelSU/kernel -name "*.c" -o -name "*.h" | xargs sed -i 's/bool ksu_su_compat_enabled/bool ksu_su_compat_enabled __read_mostly/g' || true
 
       - name: Build kernel
         working-directory: sultan
