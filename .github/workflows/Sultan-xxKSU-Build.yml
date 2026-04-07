@@ -43,7 +43,7 @@ jobs:
       - name: Sync xxKSU and Apply De-inlined SUSFS
         run: |
           cd sultan
-          curl -LSs "https://raw.githubusercontent.com/\( {{ matrix.build.repo }}/ \){{ matrix.build.branch }}/kernel/setup.sh" | bash -s ${{ matrix.build.branch }}
+          curl -LSs "https://raw.githubusercontent.com/backslashxx/KernelSU/master/kernel/setup.sh" | bash -s ${{ matrix.build.branch }}
 
           cd KernelSU
           # Apply the De-inlined SUSFS v2.1.0 patch
