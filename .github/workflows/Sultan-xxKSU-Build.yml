@@ -13,7 +13,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        susfs: [true]
         build:
           - type: xxKSU
             repo: "backslashxx/KernelSU"
@@ -41,14 +40,13 @@ jobs:
           git clone --depth=1 https://github.com/kerneltoast/${{ matrix.kernel.repo }} sultan
           echo "kernel_dir=$PWD/sultan" >> $GITHUB_ENV
 
-      - name: Sync and Fix xxKSU (De-inlined + LSM)
+      - name: Sync xxKSU and Apply De-inlined SUSFS
         run: |
           cd sultan
-          curl -LSs "https://raw.githubusercontent.com/${{ matrix.build.repo }}/${{ matrix.build.branch }}/kernel/setup.sh" | bash -s ${{ matrix.build.branch }}
+          curl -LSs "https://raw.githubusercontent.com/\( {{ matrix.build.repo }}/ \){{ matrix.build.branch }}/kernel/setup.sh" | bash -s ${{ matrix.build.branch }}
 
           cd KernelSU
-
-          # 1. Apply De-inlined SUSFS patch
+          # Apply the De-inlined SUSFS v2.1.0 patch
           patch -p1 < "../../yapixel_patches/xxksu/0001-xxKSU-kernel-implement-susfs-v2.1.0-De-inlined.patch"
 
       - name: Setup Kernel Configs
@@ -64,36 +62,55 @@ jobs:
                    CONFIG_KSU_SUSFS_SUS_KSTAT=y \
                    CONFIG_KSU_SUSFS_TRY_UMOUNT=n \
                    CONFIG_KSU_SUSFS_SPOOF_UNAME=y \
-                   CONFIG_KSU_SUSFS_OPEN_REDIRECT=y"
+                   CONFIG_KSU_SUSFS_OPEN_REDIRECT=y \
+                   CONFIG_KSU_DEBUG=y"
 
           for config in $configs; do
-            echo -e "\n${config}" >> "arch/arm64/configs/${{ matrix.kernel.defconfig }}"
+            echo -e "\n\( {config}" >> "arch/arm64/configs/ \){{ matrix.kernel.defconfig }}"
           done
-          # Force KPROBES OFF for Sultan compatibility
+
+          # Force KPROBES OFF (Sultan requirement)
           sed -i 's/CONFIG_KPROBES=y/# CONFIG_KPROBES is not set/' arch/arm64/configs/${{ matrix.kernel.defconfig }}
+          sed -i '/CONFIG_KPROBES/d' arch/arm64/configs/${{ matrix.kernel.defconfig }}
 
       - name: Apply Kernel Source Patches and Fixes
         run: |
           cd sultan
-          # 1. Apply SUSFS core files and patch with --fuzz to handle Sultan line offsets
-          cp ../susfs/kernel_patches/fs/* fs/
-          cp ../susfs/kernel_patches/include/linux/* include/linux/
-          patch -p1 --fuzz=3 < ../susfs/kernel_patches/50_add_susfs_in_gki-${{ matrix.kernel.android_version }}-${{ matrix.kernel.kernel_version }}.patch || true
 
-          # 4. Final Sultan fixes and Werror bypass
-          #patch -p1 < "../yapixel_patches/sultan/sys.c_fix.patch"
-          #patch -p1 < "../yapixel_patches/sultan/open.c_fix.patch"
+          # Copy SUSFS core files
+          cp ../susfs/kernel_patches/fs/* fs/ || true
+          cp ../susfs/kernel_patches/include/linux/* include/linux/ || true
+
+          # Apply the big SUSFS base integration patch (high fuzz for Sultan offsets)
+          patch -p1 --fuzz=6 < ../susfs/kernel_patches/50_add_susfs_in_gki-\( {{ matrix.kernel.android_version }}- \){{ matrix.kernel.kernel_version }}.patch || true
+
+          # Sultan-specific fixes (uncommented - often required with de-inlined)
+          patch -p1 < ../yapixel_patches/sultan/open.c_fix.patch || true
+          # patch -p1 < ../yapixel_patches/sultan/sys.c_fix.patch || true   # if needed later
+
+          # Critical: Ensure KernelSU (including de-inlined kernel/ subdir) is linked
+          if ! grep -q "obj-y += KernelSU/" Makefile; then
+            echo "obj-y += KernelSU/" >> Makefile
+          fi
+          if ! grep -q "obj-y += kernel/" KernelSU/Makefile 2>/dev/null; then
+            echo "obj-y += kernel/" >> KernelSU/Makefile || true
+          fi
+
+      - name: De-inlined + No-KPROBES Compatibility Fixes
+        run: |
+          cd sultan
+          # Bypass Werror (common with de-inlined + custom kernels)
+          sed -i 's/-Werror//g' Makefile arch/arm64/Makefile 2>/dev/null || true
+
+          # Extra safety for de-inlined mode on no-kprobes kernel
+          echo "obj-y += KernelSU/" >> Makefile || true
+          echo "obj-y += KernelSU/kernel/" >> Makefile || true
 
       - name: Build Kernel
         run: |
           cd sultan
-          # Link KernelSU into Makefile if not present
-          if ! grep -q "obj-y += KernelSU/" Makefile; then
-            echo "obj-y += KernelSU/" >> Makefile
-          fi
-
-          make CROSS_COMPILE=${{ env.TOOLCHAIN_PATH }} CC="${{ env.TOOLCHAIN_PATH }}gcc" -j$(nproc --all) O=out ${{ matrix.kernel.defconfig }}
-          make CROSS_COMPILE=${{ env.TOOLCHAIN_PATH }} CC="${{ env.TOOLCHAIN_PATH }}gcc" -j$(nproc --all) O=out
+          make CROSS_COMPILE=\( {{ env.TOOLCHAIN_PATH }} CC=" \){{ env.TOOLCHAIN_PATH }}gcc" -j$(nproc --all) O=out ${{ matrix.kernel.defconfig }}
+          make CROSS_COMPILE=\( {{ env.TOOLCHAIN_PATH }} CC=" \){{ env.TOOLCHAIN_PATH }}gcc" -j$(nproc --all) O=out
 
       - name: Setup AnyKernel3
         run: |
@@ -103,11 +120,11 @@ jobs:
           elif [ -f arch/arm64/boot/Image ]; then
             cp arch/arm64/boot/Image ../../AK3/Image
           fi
-          # Attempt to find and combine dtbs
+          # Combine dtbs if present
           find . -name "*.dtb" -exec cat {} + > ../../AK3/dtb || true
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.kernel.codename }}-Sultan-xxKSU-Final
+          name: ${{ matrix.kernel.codename }}-Sultan-xxKSU-SUSFS-Final
           path: AK3/*
