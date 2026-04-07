@@ -92,10 +92,10 @@ jobs:
             
             # Inject missing SUSFS expected prototypes
             cat <<EOF >> KernelSU/kernel/runtime/ksud.h
-extern void ksu_handle_sys_read(unsigned int fd);
-extern int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid);
-extern void ksu_handle_vfs_fstat(int fd, loff_t *kstat_size_ptr);
-EOF
+            extern void ksu_handle_sys_read(unsigned int fd);
+            extern int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid);
+            extern void ksu_handle_vfs_fstat(int fd, loff_t *kstat_size_ptr);
+            EOF
           fi
 
           # 4. Fix Relocation Errors (Unexpected GOT/PLT)
