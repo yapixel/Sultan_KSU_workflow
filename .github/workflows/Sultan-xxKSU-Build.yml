@@ -81,39 +81,6 @@ jobs:
           cp ../susfs/kernel_patches/include/linux/* include/linux/ || true
           patch -p1 --fuzz=6 < ../susfs/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch || true
 
-          # 2. Fix the KernelSU Unity Build structure
-          # Instead of adding objects, we ensure the de-inlined 'kernel/' dir is part of the build
-          if [ -f KernelSU/Makefile ]; then
-            sed -i '/obj-y += kernel\//d' KernelSU/Makefile
-            echo "obj-y += kernel/" >> KernelSU/Makefile
-          fi
-
-          # 3. Resolve Function Visibility at Source level
-          # We need to bridge the SUSFS externs to the KSU functions.
-          # We do this by modifying the de-inlined core file directly.
-          # Note: We use 'ksu_handle_sys_read_fd' from your source for the SUSFS 'ksu_handle_sys_read' call.
-          
-          # Use a direct append to the core file to ensure it's built with the Unity unit
-          CORE_FILE="KernelSU/kernel/ksu.c"
-          if [ -f "$CORE_FILE" ]; then
-             echo '/* SUSFS Hook Bridges */' >> "$CORE_FILE"
-             echo 'void ksu_handle_sys_read(unsigned int fd) { ksu_handle_sys_read_fd(fd); }' >> "$CORE_FILE"
-             echo 'int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid) { return 0; }' >> "$CORE_FILE"
-             echo 'int ksu_handle_devpts(struct inode *inode) { return 0; }' >> "$CORE_FILE"
-             echo 'int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code, int *value) { return 0; }' >> "$CORE_FILE"
-             echo 'void ksu_handle_vfs_fstat(int fd, loff_t *kstat_size_ptr) { }' >> "$CORE_FILE"
-          fi
-
-          # 4. Remove 'static' from everything to allow the Linker to see them
-          # This is the only way to satisfy 'extern' calls in Sultan's LTO build
-          find KernelSU/kernel -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/static noinline/noinline/g' {} +
-          find KernelSU/kernel -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/static inline/noinline/g' {} +
-
-          # 5. Fix relocation R_AARCH64_ADR_PREL_PG_HI21
-          # This specifically fixes the ksu_su_compat_enabled error
-          find KernelSU/kernel -name "*.c" | xargs sed -i 's/bool ksu_su_compat_enabled/bool ksu_su_compat_enabled __read_mostly/g' || true
-
-
       - name: Build kernel
         working-directory: sultan
         env:
@@ -140,4 +107,3 @@ jobs:
         with:
           name: ${{ matrix.kernel.codename }}-Sultan-xxKSU-SUSFS-Final
           path: AK3/*
-
