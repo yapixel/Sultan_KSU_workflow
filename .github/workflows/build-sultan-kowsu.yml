@@ -301,8 +301,8 @@ jobs:
           SUSFS_VER="${{ steps.meta.outputs.susfs_ver }}"
           KERNEL_VER="${{ env.KERNEL_VERSION }}.${{ matrix.kernel_sublevel }}"
 
-          ZIP_NAME="Sultan-${KERNEL_VER}-${{ matrix.codename }}-${SULTAN_TAG}-KowSU-r${KSU_VER}-SUSFS-${SUSFS_VER}.zip"
-          ARTIFACT_NAME="Sultan-${KERNEL_VER}-${{ matrix.codename }}-${SULTAN_TAG}-KowSU-r${KSU_VER}-SUSFS-${SUSFS_VER}"
+          ZIP_NAME="Sultan-${{ matrix.codename }}-${SULTAN_TAG}-KowSU-r${KSU_VER}-SUSFS-${SUSFS_VER}.zip"
+          ARTIFACT_NAME="Sultan-${{ matrix.codename }}-${SULTAN_TAG}-KowSU-r${KSU_VER}-SUSFS-${SUSFS_VER}"
 
           ( cd AK3 && zip -r9 "../${ZIP_NAME}" . -x "*.git*" "README.md" )
 
