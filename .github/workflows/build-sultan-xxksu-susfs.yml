@@ -91,10 +91,10 @@ jobs:
           cd KernelSU
           patch -p1 < "../../kernel_patches/xxksu/0002-xxKSU-kernel-implement-susfs-v2.1.0-De-inlined.patch"
           cd ..
+          cp ../susfs4ksu/kernel_patches/fs/* fs/ || true
+          cp ../susfs4ksu/kernel_patches/include/linux/* include/linux/ || true
+          patch -p1 --fuzz=6 < "../susfs4ksu/kernel_patches/50_add_susfs_in_gki-android${{ env.ANDROID_VERSION }}-${{ env.KERNEL_VERSION }}.patch" || true
           
-          # Apply SUSFS base patch to kernel
-          patch -p1 < "../susfs4ksu/kernel_patches/50_add_susfs_in_gki-android${{ env.ANDROID_VERSION }}-${{ env.KERNEL_VERSION }}.patch" || true
-
       - name: Apply build-reproducibility patches
         working-directory: sultan
         run: |
