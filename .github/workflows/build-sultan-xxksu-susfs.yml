@@ -11,7 +11,7 @@ env:
   ANYKERNEL_REPO: https://github.com/TheWildJames/AnyKernel3.git
   PATCHES_REPO: https://github.com/yapixel/kernel_patches
   SCRIPTS_REPO: https://github.com/TheSillyOk/sh
-  KSU_REPO: KOWX712/KernelSU
+  KSU_REPO: backslashxx/KernelSU
   KSU_BRANCH: master
   SUSFS_REPO: https://gitlab.com/simonpunk/susfs4ksu.git
   ANDROID_VERSION: "14"
@@ -75,7 +75,7 @@ jobs:
         run: |
           S_TAG=$(git -C sultan tag --sort=-committerdate | head -n1 || echo "${{ matrix.kernel.kernel_branch }}")
           chmod +x sh/get_ksuver.sh
-          K_VER=$(./sh/get_ksuver.sh "KOWX712" "KernelSU" "${{ env.KSU_BRANCH }}" || echo "unknown")
+          K_VER=$(./sh/get_ksuver.sh "backslashxx" "KernelSU" "${{ env.KSU_BRANCH }}" || echo "unknown")
           SU_VER=$(grep -m1 'define SUSFS_VERSION' susfs4ksu/kernel_patches/include/linux/susfs.h | grep -oP '".*?"' | tr -d '"')
           echo "sultan_tag=${S_TAG}" >> "$GITHUB_OUTPUT"
           echo "ksu_ver=${K_VER}" >> "$GITHUB_OUTPUT"
@@ -87,7 +87,7 @@ jobs:
           # Initialize KernelSU
           curl -LSs "https://raw.githubusercontent.com/backslashxx/KernelSU/master/kernel/setup.sh" | bash -s ${{ env.KSU_BRANCH }}
           
-          # Apply KowSU de-inlined SUSFS patch
+          # Apply xxKSU de-inlined SUSFS patch
           cd KernelSU
           patch -p1 < "../../kernel_patches/xxksu/0002-xxKSU-kernel-implement-susfs-v2.1.0-De-inlined.patch"
           cd ..
@@ -167,8 +167,8 @@ jobs:
           K_VER="${{ steps.meta.outputs.ksu_ver }}"
           SU_VER="${{ steps.meta.outputs.susfs_ver }}"
 
-          ZIP_NAME="Sultan-${{ matrix.kernel.codename }}-${S_TAG}-KowSU-r${K_VER}-SUSFS-${SU_VER}.zip"
-          echo "artifact_name=Sultan-${{ matrix.kernel.codename }}-${S_TAG}-KowSU-r${K_VER}-SUSFS-${SU_VER}" >> "$GITHUB_OUTPUT"
+          ZIP_NAME="Sultan-${{ matrix.kernel.codename }}-${S_TAG}-xxKSU-r${K_VER}-SUSFS-${SU_VER}.zip"
+          echo "artifact_name=Sultan-${{ matrix.kernel.codename }}-${S_TAG}-xxKSU-r${K_VER}-SUSFS-${SU_VER}" >> "$GITHUB_OUTPUT"
           ( cd AK3 && zip -r9 "../${ZIP_NAME}" . -x "*.git*" )
           echo "ZIP_PATH=$GITHUB_WORKSPACE/${ZIP_NAME}" >> "$GITHUB_ENV"
 
@@ -215,6 +215,6 @@ jobs:
           body: |
             ## Build Metadata
             - **Sultan Base:** `${{ needs.build.outputs.sultan_tag }}`
-            - **KowSU Version:** `r${{ needs.build.outputs.ksu_ver }}`
+            - **xxKSU Version:** `r${{ needs.build.outputs.ksu_ver }}`
             - **SUSFS Version:** `${{ needs.build.outputs.susfs_ver }}`
           files: artifacts/*.zip
