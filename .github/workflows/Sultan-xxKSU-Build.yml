@@ -72,11 +72,9 @@ jobs:
           sed -i 's/CONFIG_KPROBES=y/# CONFIG_KPROBES is not set/' arch/arm64/configs/${{ matrix.kernel.defconfig }}
           sed -i '/CONFIG_KPROBES/d' arch/arm64/configs/${{ matrix.kernel.defconfig }}
 
-      - name: Linker & Modular Source Fixups
+      - name: Apply SUSFS Base Patch
         run: |
           cd sultan
-          
-          # 1. Apply SUSFS Base Patch
           cp ../susfs/kernel_patches/fs/* fs/ || true
           cp ../susfs/kernel_patches/include/linux/* include/linux/ || true
           patch -p1 --fuzz=6 < ../susfs/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch || true
