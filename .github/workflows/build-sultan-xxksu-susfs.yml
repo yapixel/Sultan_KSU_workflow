@@ -1,4 +1,4 @@
-name: Build Pixel 7/8/9 A16 Kernel — Sultan + xxKSU + SUSFS
+name: Build Sultan + xxKSU + SUSFS
 
 permissions:
   contents: write
@@ -32,7 +32,7 @@ jobs:
         kernel:
           - codename: gs201
             kernel_repo: "https://github.com/kerneltoast/android_kernel_google_tensynos"
-            kernel_branch: "16.0.0-sultan"
+            kernel_branch: "14.0.0-sultan"
             anykernel_branch: "sultan-gs201"
             defconfig: gs201_defconfig
             dtb_path: "google-devices/gs201/dts"
@@ -42,7 +42,7 @@ jobs:
             anykernel_branch: "sultan-zuma"
             defconfig: zuma_defconfig
             dtb_path: "google-devices/zuma/dts"
-          - codename: zumapro # Tensor G4 / Pixel 9 Series
+          - codename: zumapro
             kernel_repo: "https://github.com/kerneltoast/android_kernel_google_tensynos"
             kernel_branch: "16.0.0-sultan"
             anykernel_branch: "sultan-zumapro"
@@ -67,7 +67,8 @@ jobs:
           git clone --depth=1 "${{ env.ANYKERNEL_REPO }}" -b "${{ matrix.kernel.anykernel_branch }}" AK3
           git clone --depth=1 "${{ env.PATCHES_REPO }}" -b dev kernel_patches
           git clone --depth=1 "${{ env.SCRIPTS_REPO }}" sh
-          git clone --depth=5 "${{ env.SUSFS_REPO }}" -b "gki-android${{ env.ANDROID_VERSION }}-${{ env.KERNEL_VERSION }}" susfs4ksu
+          #git clone --depth=5 "${{ env.SUSFS_REPO }}" -b "gki-android${{ env.ANDROID_VERSION }}-${{ env.KERNEL_VERSION }}" susfs4ksu
+          git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b sultan-shiba-susfs-minimal susfs4ksu
 
       - name: Collect build metadata
         id: meta
@@ -76,110 +77,23 @@ jobs:
           chmod +x sh/get_ksuver.sh
           K_VER=$(./sh/get_ksuver.sh "KOWX712" "KernelSU" "${{ env.KSU_BRANCH }}" || echo "unknown")
           SU_VER=$(grep -m1 'define SUSFS_VERSION' susfs4ksu/kernel_patches/include/linux/susfs.h | grep -oP '".*?"' | tr -d '"')
-          
           echo "sultan_tag=${S_TAG}" >> "$GITHUB_OUTPUT"
           echo "ksu_ver=${K_VER}" >> "$GITHUB_OUTPUT"
           echo "susfs_ver=${SU_VER}" >> "$GITHUB_OUTPUT"
 
-      - name: Setup Kernel Configs
+      - name: Setup KernelSU and Apply Code Patches
         run: |
           cd sultan
-          DEFCONFIG="arch/arm64/configs/${{ matrix.kernel.defconfig }}"
+          # Initialize KernelSU
+          curl -LSs "https://raw.githubusercontent.com/backslashxx/KernelSU/master/kernel/setup.sh" | bash -s ${{ env.KSU_BRANCH }}
           
-          # ----- Networking / BBR / ipset configs ----------------------------
-          EXTRA_CONFIGS=(
-            CONFIG_TMPFS_XATTR=y
-            CONFIG_TMPFS_POSIX_ACL=y
-            CONFIG_IP_NF_TARGET_TTL=y
-            CONFIG_IP6_NF_TARGET_HL=y
-            CONFIG_IP6_NF_MATCH_HL=y
-            CONFIG_TCP_CONG_ADVANCED=y
-            CONFIG_TCP_CONG_BBR=y
-            CONFIG_NET_SCH_FQ=y
-            CONFIG_TCP_CONG_BIC=n
-            CONFIG_TCP_CONG_WESTWOOD=n
-            CONFIG_TCP_CONG_HTCP=n
-            CONFIG_DEFAULT_BBR=y
-            CONFIG_BPF_STREAM_PARSER=y
-            CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y
-            CONFIG_NETFILTER_XT_SET=y
-            CONFIG_IP_SET=y
-            CONFIG_IP_SET_MAX=65534
-            CONFIG_IP_SET_BITMAP_IP=y
-            CONFIG_IP_SET_BITMAP_IPMAC=y
-            CONFIG_IP_SET_BITMAP_PORT=y
-            CONFIG_IP_SET_HASH_IP=y
-            CONFIG_IP_SET_HASH_IPMARK=y
-            CONFIG_IP_SET_HASH_IPPORT=y
-            CONFIG_IP_SET_HASH_IPPORTIP=y
-            CONFIG_IP_SET_HASH_IPPORTNET=y
-            CONFIG_IP_SET_HASH_IPMAC=y
-            CONFIG_IP_SET_HASH_MAC=y
-            CONFIG_IP_SET_HASH_NETPORTNET=y
-            CONFIG_IP_SET_HASH_NET=y
-            CONFIG_IP_SET_HASH_NETNET=y
-            CONFIG_IP_SET_HASH_NETPORT=y
-            CONFIG_IP_SET_HASH_NETIFACE=y
-            CONFIG_IP_SET_LIST_SET=y
-            CONFIG_NETFILTER_XT_TARGET_TPROXY=y
-            CONFIG_NETFILTER_XT_TARGET_REDIRECT=y
-            CONFIG_NETFILTER_XT_MATCH_SOCKET=y
-            CONFIG_NETFILTER_XT_MATCH_MARK=y
-            CONFIG_NETFILTER_XT_MATCH_IPRANGE=y
-            CONFIG_NETFILTER_XT_MATCH_OWNER=y
-            CONFIG_NETFILTER_XT_MATCH_MAC=y
-            CONFIG_NETFILTER_XT_MATCH_CONNTRACK=y
-            CONFIG_NETFILTER_XT_MARK=y
-            CONFIG_NETFILTER_XT_CONNMARK=y
-            CONFIG_NETFILTER_XT_TARGET_CONNMARK=y
-            CONFIG_IP6_NF_NAT=y
-            CONFIG_IP6_NF_TARGET_REDIRECT=y
-            CONFIG_IP6_NF_TARGET_MASQUERADE=y
-          )
-
-          for cfg in "${EXTRA_CONFIGS[@]}"; do
-            key="${cfg%%=*}"
-            sed -i -E "s/.*${key}=.*$/# ${key} removed by CI/g" "$DEFCONFIG"
-            echo "$cfg" >> "$DEFCONFIG"
-          done
-
-          # ----- KowSU + SUSFS configs ------------------------------------
-          KSU_CONFIGS=(
-            CONFIG_KSU=y
-            CONFIG_KSU_EXTRAS=y
-            CONFIG_KSU_ALLOWLIST_WORKAROUND=n
-            CONFIG_KSU_DEBUG=n
-            CONFIG_KSU_KPROBES_HOOK=n
-            CONFIG_KSU_TAMPER_SYSCALL_TABLE=y
-            CONFIG_KSU_LSM_SECURITY_HOOKS=y
-            CONFIG_KSU_THRONE_TRACKER_ALWAYS_THREADED=y
-            CONFIG_KSU_SUSFS_SUS_PATH=y
-            CONFIG_KSU_SUSFS_SUS_MOUNT=y
-            CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
-            CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
-            CONFIG_KSU_SUSFS_SUS_KSTAT=y
-            CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n
-            CONFIG_KSU_SUSFS_TRY_UMOUNT=y
-            CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
-            CONFIG_KSU_SUSFS_SPOOF_UNAME=y
-            CONFIG_KSU_SUSFS_ENABLE_LOG=y
-            CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
-            CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
-            CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-            CONFIG_KSU_SUSFS_SUS_SU=n
-            CONFIG_WERROR=n
-          )
-
-          for cfg in "${KSU_CONFIGS[@]}"; do
-            key="${cfg%%=*}"
-            sed -i -E "s/.*${key}=.*$//g" "$DEFCONFIG"
-            echo "$cfg" >> "$DEFCONFIG"
-          done
-
-          # Disable KPROBES for Sultan stability
-          sed -i 's/CONFIG_KPROBES=y/# CONFIG_KPROBES is not set/' "$DEFCONFIG"
-          sed -i '/CONFIG_KPROBES/d' "$DEFCONFIG"
-          echo "# CONFIG_KPROBES is not set" >> "$DEFCONFIG"
+          # Apply KowSU de-inlined SUSFS patch
+          cd KernelSU
+          patch -p1 < "../../kernel_patches/xxksu/0002-xxKSU-kernel-implement-susfs-v2.1.0-De-inlined.patch"
+          cd ..
+          
+          # Apply SUSFS base patch to kernel
+          patch -p1 < "../susfs4ksu/kernel_patches/50_add_susfs_in_gki-android${{ env.ANDROID_VERSION }}-${{ env.KERNEL_VERSION }}.patch" || true
 
       - name: Apply build-reproducibility patches
         working-directory: sultan
@@ -192,6 +106,41 @@ jobs:
           for p in "${PATCHES[@]}"; do
             [ -f "$p" ] && patch -p1 < "$p"
           done
+
+      - name: Setup Kernel Configs
+        run: |
+          cd sultan
+          DEFCONFIG="arch/arm64/configs/${{ matrix.kernel.defconfig }}"
+          
+          # Networking / BBR / IPSet
+          EXTRA_CONFIGS=(
+            CONFIG_TMPFS_XATTR=y CONFIG_TMPFS_POSIX_ACL=y CONFIG_IP_NF_TARGET_TTL=y
+            CONFIG_IP6_NF_TARGET_HL=y CONFIG_IP6_NF_MATCH_HL=y CONFIG_TCP_CONG_ADVANCED=y
+            CONFIG_TCP_CONG_BBR=y CONFIG_NET_SCH_FQ=y CONFIG_DEFAULT_BBR=y
+            CONFIG_IP_SET=y CONFIG_IP_SET_MAX=65534 CONFIG_NETFILTER_XT_TARGET_TPROXY=y
+            CONFIG_NETFILTER_XT_TARGET_REDIRECT=y CONFIG_IP6_NF_NAT=y
+          )
+          for cfg in "${EXTRA_CONFIGS[@]}"; do
+            key="${cfg%%=*}"; sed -i -E "s/.*${key}=.*$/# ${key} removed/g" "$DEFCONFIG"; echo "$cfg" >> "$DEFCONFIG"
+          done
+
+          # KowSU + SUSFS logic
+          KSU_CONFIGS=(
+            CONFIG_KSU=y CONFIG_KSU_EXTRAS=y CONFIG_KSU_TAMPER_SYSCALL_TABLE=y
+            CONFIG_KSU_LSM_SECURITY_HOOKS=y CONFIG_KSU_SUSFS_SUS_PATH=y
+            CONFIG_KSU_SUSFS_SUS_MOUNT=y CONFIG_KSU_SUSFS_SUS_KSTAT=y
+            CONFIG_KSU_SUSFS_SPOOF_UNAME=y CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+            CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+            CONFIG_WERROR=n
+          )
+          for cfg in "${KSU_CONFIGS[@]}"; do
+            key="${cfg%%=*}"; sed -i -E "s/.*${key}=.*$//g" "$DEFCONFIG"; echo "$cfg" >> "$DEFCONFIG"
+          done
+
+          # Disable KPROBES for Sultan stability
+          sed -i 's/CONFIG_KPROBES=y/# CONFIG_KPROBES is not set/' "$DEFCONFIG"
+          sed -i '/CONFIG_KPROBES/d' "$DEFCONFIG"
+          echo "# CONFIG_KPROBES is not set" >> "$DEFCONFIG"
 
       - name: Build kernel
         working-directory: sultan
@@ -218,7 +167,6 @@ jobs:
 
           ZIP_NAME="Sultan-${{ matrix.kernel.codename }}-${S_TAG}-KowSU-r${K_VER}-SUSFS-${SU_VER}.zip"
           echo "artifact_name=Sultan-${{ matrix.kernel.codename }}-${S_TAG}-KowSU-r${K_VER}-SUSFS-${SU_VER}" >> "$GITHUB_OUTPUT"
-          
           ( cd AK3 && zip -r9 "../${ZIP_NAME}" . -x "*.git*" )
           echo "ZIP_PATH=$GITHUB_WORKSPACE/${ZIP_NAME}" >> "$GITHUB_ENV"
 
@@ -237,13 +185,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-
       - name: Download build artifacts
         uses: actions/download-artifact@v8
         with:
           path: ./artifacts
           merge-multiple: true
-
       - name: Generate unique release tag
         id: tag
         env:
@@ -258,31 +204,15 @@ jobs:
               [[ "$REV" =~ ^[0-9]+$ ]] && (( REV > MAX_REV )) && MAX_REV="$REV"
             fi
           done <<< "$ALL_TAGS"
-          RELEASE_TAG="${BASE_TAG}-r$(( MAX_REV + 1 ))"
-          echo "RELEASE_TAG=${RELEASE_TAG}" >> "$GITHUB_ENV"
-
+          echo "RELEASE_TAG=${BASE_TAG}-r$(( MAX_REV + 1 ))" >> "$GITHUB_ENV"
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           name: Sultan Kernel — ${{ env.RELEASE_TAG }}
           body: |
-            ## Kernel Build Details
-
-            | Field | Value |
-            | :--- | :--- |
-            | **Manager** | [KOWX712/KernelSU](https://github.com/KOWX712/KernelSU) |
-            | **Variant** | Sultan (GCC 14.2) + KowSU + SUSFS |
-            | **Sultan Base** | [${{ needs.build.outputs.sultan_tag }}](https://github.com/kerneltoast/android_kernel_google_tensynos/releases/tag/${{ needs.build.outputs.sultan_tag }}) |
-            | **KowSU Version** | `r${{ needs.build.outputs.ksu_ver }}` |
-            | **SUSFS Version** | `${{ needs.build.outputs.susfs_ver }}` |
-            | **Build Date** | ${{ env.RELEASE_TAG }} |
-
-            ### 🚀 Features Included
-            * **Networking:** BBR (Default) + FQ Pacing enabled.
-            * **Proxying:** Full **IPSet** (Max 65534), TProxy, and REDIRECT support.
-            * **Stealth:** SUSFS v2.1.0 with symbol hiding and spoofed cmdline.
-            * **Kernel:** Optimized Tensor GS201, Zuma, and Zuma Pro (Pixel 9).
-
-            > Built automatically via GitHub Actions (Node.js 24).
+            ## Build Metadata
+            - **Sultan Base:** `${{ needs.build.outputs.sultan_tag }}`
+            - **KowSU Version:** `r${{ needs.build.outputs.ksu_ver }}`
+            - **SUSFS Version:** `${{ needs.build.outputs.susfs_ver }}`
           files: artifacts/*.zip
