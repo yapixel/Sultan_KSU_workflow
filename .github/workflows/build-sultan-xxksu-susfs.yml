@@ -59,7 +59,7 @@ jobs:
         run: |
           wget -q "${{ env.GCC_ARCHIVE_URL }}" -O gcc.tar.gz
           tar -xf gcc.tar.gz
-          echo "GCC_PATH=$PWD/gcc-${{ env.GCC_VERSION }}-nolibc/aarch64-linux/bin/aarch64-linux-" >> $GITHUB_ENV
+          echo "TOOLCHAIN_PATH=$GITHUB_WORKSPACE/gcc-14.2.0-nolibc/aarch64-linux/bin/aarch64-linux-" >> $GITHUB_ENV
 
       - name: Clone source and dependencies
         run: |
@@ -145,20 +145,13 @@ jobs:
       - name: Build kernel
         working-directory: sultan
         env:
-          CROSS_COMPILE: ${{ env.GCC_PATH }}
-          CC: ${{ env.GCC_PATH }}gcc
+          CROSS_COMPILE: ${{ env.TOOLCHAIN_PATH }}
+          CC: ${{ env.TOOLCHAIN_PATH }}gcc
           KBUILD_BUILD_USER: build-user
           KBUILD_BUILD_HOST: build-host
         run: |
-          echo "===================================================="
-          echo "🚀 STARTING BUILD FOR: ${{ matrix.kernel.codename }}"
-          echo "===================================================="
-          echo "🛠️ STEP 1: Configuring Kernel..."
-          make O=out ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" ${{ matrix.kernel.defconfig }}
-          
-          echo "⚙️ STEP 2: Compiling Kernel..."
-          make O=out ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" -j"$(nproc --all)"
-          echo "✅ BUILD FINISHED!"
+          make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" ${{ matrix.kernel.defconfig }}
+          make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" -j"$(nproc --all)"
 
       - name: Package AnyKernel3
         id: package
