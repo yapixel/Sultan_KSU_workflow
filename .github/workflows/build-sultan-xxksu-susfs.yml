@@ -14,7 +14,7 @@ env:
   KSU_REPO: KOWX712/KernelSU
   KSU_BRANCH: master
   SUSFS_REPO: https://gitlab.com/simonpunk/susfs4ksu.git
-  ANDROID_VERSION: "16"
+  ANDROID_VERSION: "14"
   KERNEL_VERSION: "6.1"
   GCC_VERSION: "14.2.0"
   GCC_ARCHIVE_URL: "https://kernel.org/pub/tools/crosstool/files/bin/x86_64/14.2.0/x86_64-gcc-14.2.0-nolibc-aarch64-linux.tar.gz"
