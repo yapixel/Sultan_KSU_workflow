@@ -102,6 +102,14 @@ jobs:
           echo "Injecting xxKSU via setup.sh..."
           curl -LSs "https://raw.githubusercontent.com/${{ env.KSU_REPO }}/${{ env.KSU_BRANCH }}/kernel/setup.sh" | bash -s -- "${{ env.KSU_BRANCH }}"
 
+      - name: Apply build-reproducibility patches
+        working-directory: sultan
+        run: |
+          PATCHES=(../kernel_patches/sultan/60_scripts_mkcompile_h.patch ../kernel_patches/sultan/61_scripts_setlocalversion.patch ../kernel_patches/sultan/62_init_Makefile.patch)
+          for patch in "${PATCHES[@]}"; do
+            patch -p1 < "$patch"
+          done
+
       - name: Build Kernel
         working-directory: sultan
         env:
@@ -113,7 +121,7 @@ jobs:
           # 1. Generate base config
           make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" ${{ matrix.defconfig }}
 
-          # 2. Inject Fortress Networking (Standard BBRv1)
+          # 2. Inject Fortress Networking
           EXTRA_CONFIGS=(
             CONFIG_NETFILTER_ADVANCED=y
             CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y
@@ -130,7 +138,6 @@ jobs:
             CONFIG_TCP_CONG_BBR=y
             CONFIG_DEFAULT_BBR=y
             CONFIG_NET_SCH_FQ=y
-            CONFIG_LOCALVERSION="-Sultan-atp4ksu"
             CONFIG_KSU=y
             CONFIG_KSU_TAMPER_SYSCALL_TABLE=y
           )
