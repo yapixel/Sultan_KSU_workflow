@@ -45,7 +45,7 @@ jobs:
           cd sultan
           curl -LSs "https://raw.githubusercontent.com/backslashxx/KernelSU/master/kernel/setup.sh" | bash -s ${{ matrix.build.branch }}
           cd KernelSU
-          patch -p1 < "../../yapixel_patches/xxksu/0001-xxKSU-kernel-implement-susfs-v2.1.0-De-inlined.patch"
+          patch -p1 < "../../yapixel_patches/xxksu/0002-xxKSU-kernel-implement-susfs-v2.1.0-De-inlined.patch"
 
       - name: Setup Kernel Configs
         run: |
