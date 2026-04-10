@@ -32,7 +32,7 @@ jobs:
         kernel:
           - codename: gs201
             kernel_repo: "https://github.com/kerneltoast/android_kernel_google_tensynos"
-            kernel_branch: "14.0.0-sultan"
+            kernel_branch: "16.0.0-sultan"
             anykernel_branch: "sultan-gs201"
             defconfig: gs201_defconfig
             dtb_path: "google-devices/gs201/dts"
