@@ -109,72 +109,74 @@ jobs:
           echo "Sultan tag : ${SULTAN_TAG}"
           echo "xxKSU version : r${KSU_VER}"
 
-      # -----------------------------------------------------------------------
       - name: Configure defconfig
         working-directory: sultan
         run: |
           DEFCONFIG="arch/arm64/configs/${{ matrix.defconfig }}"
 
-          # ----- Networking / BBR / ipset configs ----------------------------
+          # ----- Networking / BBR / ipset / VPN Egress configs ---------------
           EXTRA_CONFIGS=(
+            # System & Filesystem
             CONFIG_TMPFS_XATTR=y
             CONFIG_TMPFS_POSIX_ACL=y
-            CONFIG_IP_NF_TARGET_TTL=y
-            CONFIG_IP6_NF_TARGET_HL=y
-            CONFIG_IP6_NF_MATCH_HL=y
+            
+            # TCP Performance (BBR)
             CONFIG_TCP_CONG_ADVANCED=y
             CONFIG_TCP_CONG_BBR=y
             CONFIG_NET_SCH_FQ=y
+            CONFIG_DEFAULT_BBR=y
             CONFIG_TCP_CONG_BIC=n
             CONFIG_TCP_CONG_WESTWOOD=n
             CONFIG_TCP_CONG_HTCP=n
-            CONFIG_DEFAULT_BBR=y
-            CONFIG_BPF_STREAM_PARSER=y
-            CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y
-            CONFIG_NETFILTER_XT_SET=y
+            
+            # Policy Routing (CRITICAL for Google VPN & Table 1066)
+            CONFIG_IP_MULTIPLE_TABLES=y
+            CONFIG_IPV6_MULTIPLE_TABLES=y
+            CONFIG_XFRM_SUB_POLICY=y
+            CONFIG_XFRM_STATISTICS=y
+            
+            # IPSet (Required for CN-IP Bypass)
             CONFIG_IP_SET=y
             CONFIG_IP_SET_MAX=65534
-            CONFIG_IP_SET_BITMAP_IP=y
-            CONFIG_IP_SET_BITMAP_IPMAC=y
-            CONFIG_IP_SET_BITMAP_PORT=y
+            CONFIG_NETFILTER_XT_SET=y
             CONFIG_IP_SET_HASH_IP=y
-            CONFIG_IP_SET_HASH_IPMARK=y
-            CONFIG_IP_SET_HASH_IPPORT=y
-            CONFIG_IP_SET_HASH_IPPORTIP=y
-            CONFIG_IP_SET_HASH_IPPORTNET=y
-            CONFIG_IP_SET_HASH_IPMAC=y
-            CONFIG_IP_SET_HASH_MAC=y
-            CONFIG_IP_SET_HASH_NETPORTNET=y
             CONFIG_IP_SET_HASH_NET=y
-            CONFIG_IP_SET_HASH_NETNET=y
-            CONFIG_IP_SET_HASH_NETPORT=y
-            CONFIG_IP_SET_HASH_NETIFACE=y
             CONFIG_IP_SET_LIST_SET=y
-            CONFIG_NETFILTER_XT_TARGET_TPROXY=y
-            CONFIG_NETFILTER_XT_TARGET_REDIRECT=y
+            
+            # Netfilter Matches (TProxy / Owner / Mark)
+            CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y
             CONFIG_NETFILTER_XT_MATCH_SOCKET=y
             CONFIG_NETFILTER_XT_MATCH_MARK=y
-            CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y
             CONFIG_NETFILTER_XT_MATCH_IPRANGE=y
             CONFIG_NETFILTER_XT_MATCH_OWNER=y
             CONFIG_NETFILTER_XT_MATCH_MAC=y
             CONFIG_NETFILTER_XT_MATCH_CONNTRACK=y
             CONFIG_NETFILTER_XT_MARK=y
             CONFIG_NETFILTER_XT_CONNMARK=y
+            CONFIG_BPF_STREAM_PARSER=y
+            
+            # Netfilter Targets (Redirect / MSS Fix / Masquerade)
+            CONFIG_NETFILTER_XT_TARGET_TPROXY=y
+            CONFIG_NETFILTER_XT_TARGET_REDIRECT=y
             CONFIG_NETFILTER_XT_TARGET_CONNMARK=y
+            CONFIG_NETFILTER_XT_TARGET_TCPMSS=y
+            CONFIG_IP_NF_TARGET_TTL=y
+            CONFIG_IP_NF_TARGET_MASQUERADE=y
+            CONFIG_IP6_NF_TARGET_HL=y
             CONFIG_IP6_NF_NAT=y
             CONFIG_IP6_NF_TARGET_REDIRECT=y
             CONFIG_IP6_NF_TARGET_MASQUERADE=y
-           EOF
           )
 
+          # Apply Extra Configs
           for cfg in "${EXTRA_CONFIGS[@]}"; do
             key="${cfg%%=*}"
+            # Remove existing lines to avoid duplicates or conflicts
             sed -i -E "s/.*${key}=.*$/# ${key} removed by CI/g" "$DEFCONFIG"
             echo "$cfg" >> "$DEFCONFIG"
           done
 
-          # ----- KernelSU configs --------------------------------------------
+          # ----- KernelSU configs (Integrated manually) ----------------------
           cat >> "$DEFCONFIG" << 'EOF'
           CONFIG_KSU=y
           CONFIG_KSU_EXTRAS=y
@@ -185,6 +187,7 @@ jobs:
           CONFIG_KSU_LSM_SECURITY_HOOKS=y
           CONFIG_KSU_THRONE_TRACKER_ALWAYS_THREADED=y
           EOF
+
 
       # -----------------------------------------------------------------------
       - name: Apply build-reproducibility patches
