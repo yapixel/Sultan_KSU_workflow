@@ -94,7 +94,7 @@ jobs:
             done
           done
 
-      -- name: Inject Configuration (Fortress Deep Unlock)
+      - name: Inject Configuration (Fortress Deep Unlock)
         working-directory: sultan
         env:
           CROSS_COMPILE: ${{ env.GCC_PATH }}
