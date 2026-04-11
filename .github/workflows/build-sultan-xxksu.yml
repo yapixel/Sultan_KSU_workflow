@@ -191,10 +191,18 @@ jobs:
           CC: ${{ env.GCC_PATH }}gcc
         run: |
           make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" -j"$(nproc --all)"
+          
+          # Object Verification (Blueprint Truth Test)
+          echo "=========================================="
+          echo "      OBJECT FILE VERIFICATION            "
+          echo "=========================================="
           if [ ! -f "out/net/netfilter/xt_ADDRTYPE.o" ]; then
             echo "::error::xt_ADDRTYPE.o was NOT compiled. Feature stripped!"
             exit 1
+          else
+            echo "SUCCESS: xt_ADDRTYPE.o confirmed."
           fi
+          echo "=========================================="
 
       - name: Package
         run: |
@@ -236,6 +244,7 @@ jobs:
           git config user.email "actions@github.com"
           git tag "$TAG"
           git push origin "$TAG"
+          
           gh release create "$TAG" artifacts/**/*.zip \
             --title "Kernel Build — $TAG" \
             --notes "
@@ -250,4 +259,6 @@ jobs:
             ### 🛠️ Networking Features (Fortress)
             - **TCP Congestion:** BBR (v1) + FQ
             - **Routing:** Policy Routing (Table 1066) + IPSet (64k)
-            - **Fixes:** ADDRTYPE Match, Google VPN (XFRM), TTL 64 Share"
+            - **Fixes:** ADDRTYPE Match, Google VPN (XFRM), TTL 64 Share
+            
+            > Built for Pixel 7, 8, and 9 Series."
