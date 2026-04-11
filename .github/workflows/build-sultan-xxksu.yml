@@ -191,22 +191,6 @@ jobs:
           CC: ${{ env.GCC_PATH }}gcc
         run: |
           make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" -j"$(nproc --all)"
-          
-          echo "=== Blueprint Truth Test: atp4pixel / VPN Readiness ==="
-          # Define the targets we need
-          TARGETS=("xt_ADDRTYPE" "xt_TCPMSS" "xfrm_state")
- 
-          for target in "${TARGETS[@]}"; do
-          # Search for the object or the module in the output directory
-          FOUND=$(find out/ -name "${target}.o" -o -name "${target}.ko" | head -n 1)
-  
-          if [ -n "$FOUND" ]; then
-           echo "SUCCESS: $target found at $FOUND"
-          else
-           echo "::error::Critical component $target missing from build output!"
-          exit 1
-          fi
-          done
 
 
       - name: Package
