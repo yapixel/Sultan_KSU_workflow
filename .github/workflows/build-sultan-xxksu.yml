@@ -80,18 +80,10 @@ jobs:
           patch -p1 < ../kernel_patches/sultan/61_scripts_setlocalversion.patch
           patch -p1 < ../kernel_patches/sultan/62_init_Makefile.patch
 
-      - name: Build
+      - name: Inject Configuration
         working-directory: sultan
-        env:
-          KBUILD_BUILD_USER: build-user
-          KBUILD_BUILD_HOST: build-host
-          CROSS_COMPILE: ${{ env.GCC_PATH }}
-          CC: ${{ env.GCC_PATH }}gcc
         run: |
           make O=out ${{ matrix.defconfig }}
-          
-          # Inject configurations strictly from blueprint
-          # Ensuring NETFILTER_ADVANCED is set to prevent ADDRTYPE rejection
           cat >> out/.config <<EOF
           # ----- Networking / BBR / ipset / VPN Egress configs ----------------------------
           CONFIG_NETFILTER_ADVANCED=y
@@ -156,10 +148,40 @@ jobs:
           CONFIG_KSU_LSM_SECURITY_HOOKS=y
           CONFIG_KSU_THRONE_TRACKER_ALWAYS_THREADED=y
           EOF
+
+      - name: Configuration Debugger
+        working-directory: sultan
+        run: |
+          echo "=========================================="
+          echo "      KERNEL CONFIGURATION STATUS         "
+          echo "=========================================="
+          CHECK_FLAGS=(
+            CONFIG_NETFILTER_ADVANCED
+            CONFIG_NETFILTER_XT_MATCH_ADDRTYPE
+            CONFIG_IP_NF_MATCH_ADDRTYPE
+            CONFIG_IP_SET
+            CONFIG_IP_MULTIPLE_TABLES
+            CONFIG_XFRM_STATISTICS
+            CONFIG_TCP_CONG_BBR
+            CONFIG_KSU
+            CONFIG_KSU_TAMPER_SYSCALL_TABLE
+          )
+          for flag in "${CHECK_FLAGS[@]}"; do
+            grep "^${flag}=" out/.config || echo "${flag} is NOT SET"
+          done
+          echo "=========================================="
           
-          # Final verification check: If ADDRTYPE is missing, stop the build here
-          grep "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y" out/.config || { echo "ERROR: ADDRTYPE injection failed!"; exit 1; }
-          
+          # Blueprint Fail-Fast
+          grep "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y" out/.config || { echo "::error::ADDRTYPE injection failed. Aborting build."; exit 1; }
+
+      - name: Build Kernel
+        working-directory: sultan
+        env:
+          KBUILD_BUILD_USER: build-user
+          KBUILD_BUILD_HOST: build-host
+          CROSS_COMPILE: ${{ env.GCC_PATH }}
+          CC: ${{ env.GCC_PATH }}gcc
+        run: |
           make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" -j"$(nproc --all)"
 
       - name: Package
@@ -192,7 +214,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           KSU_VER: ${{ needs.build.outputs.ksu_ver }}
-          S_TAG: ${{ needs.build.outputs.s_tag }}
+          SULTAN_TAG: ${{ needs.build.outputs.s_tag }}
         run: |
           DATE=$(date +"%Y.%m.%d")
           MAX_REV=$(git tag -l "${DATE}-r*" | sed "s/${DATE}-r//" | sort -n | tail -n1)
@@ -209,7 +231,7 @@ jobs:
             ### 🚀 Build Information
             | Component | Details |
             | :--- | :--- |
-            | **Kernel Base** | Sultan ($S_TAG) |
+            | **Kernel Base** | Sultan ($SULTAN_TAG) |
             | **Manager** | [backslashxx/KernelSU](https://github.com/backslashxx/KernelSU) |
             | **xxKSU Ver** | \`r$KSU_VER\` |
             | **Compiler** | GCC 14.2.0 |
