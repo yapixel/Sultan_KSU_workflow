@@ -170,18 +170,62 @@ jobs:
             echo "$cfg" >> out/.config
           done
 
-      - name: Configuration Debugger
+      - name: Configuration Debugger (Blueprint Protocol)
         working-directory: sultan
         run: |
-          echo "=========================================="
-          echo "      KERNEL CONFIGURATION STATUS         "
-          echo "=========================================="
-          CHECK_FLAGS=(CONFIG_NETFILTER_ADVANCED CONFIG_NETFILTER_XT_MATCH_ADDRTYPE CONFIG_IP_SET CONFIG_TCP_CONG_BBR CONFIG_KSU CONFIG_XFRM_STATISTICS)
-          for flag in "${CHECK_FLAGS[@]}"; do
-            grep "^${flag}=" out/.config || echo "${flag} is NOT SET"
-          done
-          echo "=========================================="
-          grep "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y" out/.config || { echo "::error::ADDRTYPE injection failed!"; exit 1; }
+          echo "=================================================="
+          echo "      BLUEPRINT INTEGRITY CHECK (PRE-BUILD)       "
+          echo "=================================================="
+          
+          # Function to check and report
+          check_cfg() {
+            if grep -q "^$1=y" out/.config; then
+              echo "  [OK] $1"
+            elif grep -q "^$1=m" out/.config; then
+              echo "  [OK] $1 (as Module)"
+            else
+              echo "  [!!] $1 is MISSING/DISABLED"
+              return 1
+            fi
+          }
+
+          ERRORS=0
+
+          echo "\n[*] Pillar 1: atp4pixel / Networking Bridge"
+          check_cfg "CONFIG_NETFILTER_ADVANCED" || ERRORS=$((ERRORS+1))
+          check_cfg "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE" || ERRORS=$((ERRORS+1))
+          check_cfg "CONFIG_NETFILTER_XT_TARGET_TPROXY" || ERRORS=$((ERRORS+1))
+          check_cfg "CONFIG_NETFILTER_XT_TARGET_TCPMSS" || ERRORS=$((ERRORS+1))
+          check_cfg "CONFIG_NETFILTER_XT_MATCH_SOCKET" || ERRORS=$((ERRORS+1))
+          check_cfg "CONFIG_NETFILTER_XT_SET" || ERRORS=$((ERRORS+1))
+
+          echo "\n[*] Pillar 2: Google VPN (XFRM) & Handoff"
+          check_cfg "CONFIG_XFRM_STATISTICS" || ERRORS=$((ERRORS+1))
+          check_cfg "CONFIG_XFRM_MIGRATE" || ERRORS=$((ERRORS+1))
+          check_cfg "CONFIG_IP_MULTIPLE_TABLES" || ERRORS=$((ERRORS+1))
+          check_cfg "CONFIG_INET_IPCOMP" || ERRORS=$((ERRORS+1))
+
+          echo "\n[*] Pillar 3: IPSet Fortress Engine"
+          check_cfg "CONFIG_IP_SET" || ERRORS=$((ERRORS+1))
+          check_cfg "CONFIG_IP_SET_HASH_IP" || ERRORS=$((ERRORS+1))
+          check_cfg "CONFIG_IP_SET_HASH_NET" || ERRORS=$((ERRORS+1))
+
+          echo "\n[*] Pillar 4: Hookless xxKSU & FS Stability"
+          check_cfg "CONFIG_KSU" || ERRORS=$((ERRORS+1))
+          check_cfg "CONFIG_KSU_LSM_SECURITY_HOOKS" || ERRORS=$((ERRORS+1))
+          check_cfg "CONFIG_INOTIFY_USER" || ERRORS=$((ERRORS+1))
+
+          echo "\n=================================================="
+          if [ $ERRORS -gt 0 ]; then
+            echo "  TOTAL ERRORS: $ERRORS"
+            echo "  CRITICAL: Blueprint violation detected!"
+            echo "=================================================="
+            exit 1
+          else
+            echo "  BLUEPRINT VERIFIED: All modules locked."
+            echo "=================================================="
+          fi
+
 
       - name: Build Kernel
         working-directory: sultan
