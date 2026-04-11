@@ -182,12 +182,12 @@ jobs:
           CONFIG_KSU_LSM_SECURITY_HOOKS=y
           CONFIG_KSU_THRONE_TRACKER_ALWAYS_THREADED=y
           
-          # --- cgroups v2 & Security ---
           CONFIG_SECURITY_NETWORK=y
           CONFIG_CGROUPS=y
           CONFIG_CGROUP_BPF=y
           CONFIG_CGROUP_SCHED=y
-          ​CONFIG_CGROUP_PIDS=y
+          CONFIG_CGROUP_PIDS=y
+          CONFIG_CGROUP_FREEZER=y
           CONFIG_INOTIFY_USER=y
           EOF
 
