@@ -90,7 +90,7 @@ jobs:
         run: |
           make O=out ${{ matrix.defconfig }}
           
-          # Inject configurations strictly from blueprint
+          # Blueprint configuration injection
           cat >> out/.config <<EOF
           # ----- Networking / BBR / ipset / VPN Egress configs ----------------------------
           CONFIG_NETFILTER_ADVANCED=y
@@ -156,7 +156,7 @@ jobs:
           CONFIG_KSU_THRONE_TRACKER_ALWAYS_THREADED=y
           EOF
           
-          # Final verification check
+          # Fail-fast verification
           grep "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y" out/.config || { echo "ERROR: ADDRTYPE injection failed!"; exit 1; }
           
           make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" -j"$(nproc --all)"
@@ -190,6 +190,8 @@ jobs:
       - name: Tag and Release
         env:
           GH_TOKEN: ${{ github.token }}
+          KSU_VER: ${{ needs.build.outputs.ksu_ver }}
+          SULTAN_TAG: ${{ needs.build.outputs.s_tag }}
         run: |
           DATE=$(date +"%Y.%m.%d")
           MAX_REV=$(git tag -l "${DATE}-r*" | sed "s/${DATE}-r//" | sort -n | tail -n1)
@@ -199,6 +201,21 @@ jobs:
           git config user.email "actions@github.com"
           git tag "$TAG"
           git push origin "$TAG"
+          
           gh release create "$TAG" artifacts/**/*.zip \
             --title "Kernel Build — $TAG" \
-            --notes "xxKSU: r${{ needs.build.outputs.ksu_ver }} | Sultan: ${{ needs.build.outputs.s_tag }}"
+            --notes "
+            ### 🚀 Build Information
+            | Component | Details |
+            | :--- | :--- |
+            | **Kernel Base** | Sultan ($SULTAN_TAG) |
+            | **Manager** | [backslashxx/KernelSU](https://github.com/backslashxx/KernelSU) |
+            | **xxKSU Ver** | \`r$KSU_VER\` |
+            | **Compiler** | GCC 14.2.0 |
+            
+            ### 🛠️ Networking Features (Fortress)
+            - **TCP Congestion:** BBR (v1) + FQ
+            - **Routing:** Policy Routing (Table 1066) + IPSet (64k)
+            - **Fixes:** ADDRTYPE Match, Google VPN (XFRM), TTL 64 Share
+            
+            > Built for Pixel 7 (gs201), Pixel 8 (zuma), and Pixel 9 (zumapro)."
