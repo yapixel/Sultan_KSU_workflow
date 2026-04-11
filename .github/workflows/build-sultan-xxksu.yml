@@ -3,9 +3,6 @@ name: Build Sultan + xxKSU
 on:
   workflow_dispatch:
 
-# ---------------------------------------------------------------------------
-# Shared environment variables
-# ---------------------------------------------------------------------------
 env:
   ANYKERNEL_REPO: https://github.com/TheWildJames/AnyKernel3.git
   PATCHES_REPO: https://github.com/yapixel/kernel_patches
@@ -16,9 +13,6 @@ env:
   GCC_ARCHIVE_URL: >-
     https://kernel.org/pub/tools/crosstool/files/bin/x86_64/14.2.0/x86_64-gcc-14.2.0-nolibc-aarch64-linux.tar.gz
 
-# ---------------------------------------------------------------------------
-# Job 1: Build kernel and produce a flashable ZIP
-# ---------------------------------------------------------------------------
 jobs:
   build:
     name: Build ${{ matrix.device_label }} Kernel — Sultan + xxKSU
@@ -35,7 +29,6 @@ jobs:
             defconfig: zuma_defconfig
             dtb_path: google-devices/zuma/dts
             device_label: zuma
-
           - codename: gs201
             kernel_branch: 16.0.0-sultan
             kernel_repo: https://github.com/kerneltoast/android_kernel_google_tensynos
@@ -43,7 +36,6 @@ jobs:
             defconfig: gs201_defconfig
             dtb_path: google-devices/gs201/dts
             device_label: gs201
-
           - codename: zumapro
             kernel_branch: 16.0.0-sultan
             kernel_repo: https://github.com/kerneltoast/android_kernel_google_tensynos
@@ -55,8 +47,7 @@ jobs:
     outputs:
       sultan_tag:    ${{ steps.meta.outputs.sultan_tag }}
       ksu_ver:       ${{ steps.meta.outputs.ksu_ver }}
-      zip_name:      ${{ steps.package.outputs.zip_name }}
-      artifact_name: ${{ steps.package.outputs.artifact_name }}
+      final_tag:     ${{ steps.tag_gen.outputs.final_tag }}
 
     steps:
       - name: Checkout repository
@@ -66,14 +57,10 @@ jobs:
 
       - name: Install GCC ${{ env.GCC_VERSION }}
         run: |
-          echo "Downloading GCC ${{ env.GCC_VERSION }}..."
           wget -q "${{ env.GCC_ARCHIVE_URL }}" -O gcc.tar.gz
           tar -xf gcc.tar.gz
           GCC_BIN="$PWD/gcc-${{ env.GCC_VERSION }}-nolibc/aarch64-linux/bin/aarch64-linux-"
           echo "GCC_PATH=${GCC_BIN}" >> "$GITHUB_ENV"
-          echo "=========================================="
-          echo "        COMPILER VERIFICATION             "
-          echo "=========================================="
           ${GCC_BIN}gcc -v
 
       - name: Clone source
@@ -90,25 +77,21 @@ jobs:
           KSU_VER=$(./sh/get_ksuver.sh "backslashxx" "KernelSU" "${{ env.KSU_BRANCH }}" || echo "unknown")
           echo "sultan_tag=${SULTAN_TAG}" >> "$GITHUB_OUTPUT"
           echo "ksu_ver=${KSU_VER}"       >> "$GITHUB_OUTPUT"
-          echo "=========================================="
-          echo " Device Codename : ${{ matrix.codename }}"
-          echo " Sultan Tag      : ${SULTAN_TAG}"
-          echo " xxKSU Version   : r${KSU_VER}"
-          echo "=========================================="
+
+      - name: Generate Revision Tag
+        id: tag_gen
+        run: |
+          BASE_TAG="$(date +"%Y.%m.%d")"
+          MAX_REV=$(git tag -l "${BASE_TAG}-r*" | sed "s/${BASE_TAG}-r//" | sort -n | tail -n1)
+          [ -z "$MAX_REV" ] && MAX_REV=0
+          FINAL_TAG="${BASE_TAG}-r$(( MAX_REV + 1 ))"
+          echo "final_tag=$FINAL_TAG" >> "$GITHUB_OUTPUT"
+          echo "FINAL_TAG=$FINAL_TAG" >> "$GITHUB_ENV"
 
       - name: Integrate xxKSU
         working-directory: sultan
         run: |
-          echo "Injecting xxKSU via setup.sh..."
           curl -LSs "https://raw.githubusercontent.com/${{ env.KSU_REPO }}/${{ env.KSU_BRANCH }}/kernel/setup.sh" | bash -s -- "${{ env.KSU_BRANCH }}"
-
-      - name: Apply build-reproducibility patches
-        working-directory: sultan
-        run: |
-          PATCHES=(../kernel_patches/sultan/60_scripts_mkcompile_h.patch ../kernel_patches/sultan/61_scripts_setlocalversion.patch ../kernel_patches/sultan/62_init_Makefile.patch)
-          for patch in "${PATCHES[@]}"; do
-            patch -p1 < "$patch"
-          done
 
       - name: Build Kernel
         working-directory: sultan
@@ -118,10 +101,7 @@ jobs:
           CROSS_COMPILE: ${{ env.GCC_PATH }}
           CC: ${{ env.GCC_PATH }}gcc
         run: |
-          # 1. Generate base config
           make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" ${{ matrix.defconfig }}
-
-          # 2. Inject Fortress Networking
           EXTRA_CONFIGS=(
             CONFIG_NETFILTER_ADVANCED=y
             CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y
@@ -141,98 +121,69 @@ jobs:
             CONFIG_KSU=y
             CONFIG_KSU_TAMPER_SYSCALL_TABLE=y
           )
-
           for cfg in "${EXTRA_CONFIGS[@]}"; do
             key="${cfg%%=*}"
             sed -i "/${key}/d" out/.config
             echo "$cfg" >> out/.config
           done
-          
-          # 3. Fail-fast Verification
-          grep "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE" out/.config || { echo "::error::ADDRTYPE NOT FOUND"; exit 1; }
-          
-          # 4. Final Compilation
           make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" -j"$(nproc --all)"
 
       - name: Package
-        id: package
         run: |
           cp sultan/out/arch/arm64/boot/Image.lz4 AK3/Image.lz4
           cat sultan/out/${{ matrix.dtb_path }}/*.dtb > AK3/dtb
-          ZIP_NAME="Sultan-${{ matrix.codename }}-$(date +'%Y%m%d-%H%M')-xxKSU-r${{ steps.meta.outputs.ksu_ver }}.zip"
+          ZIP_NAME="Sultan-${{ matrix.codename }}-$(date +'%Y%m%d')-xxKSU-r${{ steps.meta.outputs.ksu_ver }}.zip"
           ( cd AK3 && zip -r9 "../${ZIP_NAME}" . -x "*.git*" )
-          echo "zip_name=${ZIP_NAME}" >> "$GITHUB_OUTPUT"
           echo "ZIP_PATH=$GITHUB_WORKSPACE/${ZIP_NAME}" >> "$GITHUB_ENV"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v7
         with:
-          name: Sultan-${{ matrix.codename }}
+          name: Sultan-${{ matrix.codename }}-${{ env.FINAL_TAG }}
           path: ${{ env.ZIP_PATH }}
 
-# ---------------------------------------------------------------------------
-# Job 2: Create a GitHub Release
-# ---------------------------------------------------------------------------
   release:
-    name: Create GitHub Release
     needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-
-      - name: Download build artifacts
+      - name: Download artifacts
         uses: actions/download-artifact@v8
         with:
           path: ./artifacts
-
-      - name: Generate Revision Tag
-        id: tag_logic
+      - name: Push Tag and Release
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build.outputs.final_tag }}
+          KSU_VER: ${{ needs.build.outputs.ksu_ver }}
+          SULTAN_TAG: ${{ needs.build.outputs.sultan_tag }}
+          GCC_VER: "14.2.0"
         run: |
-          # 1. Matches your screenshot format (YYYY.MM.DD)
-          BASE_TAG="$(date +"%Y.%m.%d")"
-          
-          # 2. Extract highest revision number from existing tags
-          MAX_REV=$(git tag -l "${BASE_TAG}-r*" | sed "s/${BASE_TAG}-r//" | sort -n | tail -n1)
-          if [ -z "$MAX_REV" ]; then MAX_REV=0; fi
-          
-          # 3. Final Tag
-          NEXT_REV=$(( MAX_REV + 1 ))
-          FINAL_TAG="${BASE_TAG}-r${NEXT_REV}"
-          
-          echo "FINAL_TAG=$FINAL_TAG" >> "$GITHUB_ENV"
-          
-          # 4. Push tag FIRST to satisfy GitHub API
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag "$FINAL_TAG"
-          git push origin "$FINAL_TAG"
+          git tag "$TAG"
+          git push origin "$TAG"
 
-      - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2.6.1
-        with:
-          tag_name: ${{ env.FINAL_TAG }}
-          name: "Kernel Build — ${{ env.FINAL_TAG }}"
-          body: |
+          # Restored release body and metadata
+          gh release create "$TAG" artifacts/**/*.zip \
+            --title "Kernel Build — $TAG" \
+            --notes "
             ### 🚀 Build Information
             | Component | Details |
             | :--- | :--- |
-            | **Kernel Base** | Sultan (Google Tensor 6.1) |
+            | **Kernel Base** | Sultan ($SULTAN_TAG) |
             | **Manager** | [backslashxx/KernelSU](https://github.com/backslashxx/KernelSU) |
-            | **xxKSU Ver** | `r${{ needs.build.outputs.ksu_ver }}` |
-            | **Compiler** | GCC ${{ env.GCC_VERSION }} |
+            | **xxKSU Ver** | \`r$KSU_VER\` |
+            | **Compiler** | GCC $GCC_VER |
             
             ### 🛠️ Networking Features (Fortress)
             - **TCP Congestion:** BBR (v1) + FQ
             - **Routing:** Policy Routing (Table 1066) + IPSet (64k)
             - **Fixes:** ADDRTYPE Match, TCPMSS Clamping, TTL 64 Share
             
-            > Built for Pixel 7 (gs201), Pixel 8 (zuma), and Pixel 9 (zumapro).
-          files: artifacts/**/*.zip
+            > Built for Pixel 7 (gs201), Pixel 8 (zuma), and Pixel 9 (zumapro)."
