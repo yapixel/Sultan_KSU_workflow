@@ -181,6 +181,18 @@ jobs:
           CC: ${{ env.GCC_PATH }}gcc
         run: |
           make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" -j"$(nproc --all)"
+          
+          # OBJECT VERIFICATION STEP
+          echo "=========================================="
+          echo "      OBJECT FILE VERIFICATION            "
+          echo "=========================================="
+          if [ -f "out/net/netfilter/xt_ADDRTYPE.o" ]; then
+            echo "SUCCESS: xt_ADDRTYPE.o found."
+          else
+            echo "::error::xt_ADDRTYPE.o was NOT compiled. The kernel stripped the feature!"
+            exit 1
+          fi
+          echo "=========================================="
 
       - name: Package
         run: |
@@ -212,7 +224,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           KSU_VER: ${{ needs.build.outputs.ksu_ver }}
-          SULTAN_TAG: ${{ needs.build.outputs.s_tag }}
+          S_TAG: ${{ needs.build.outputs.s_tag }}
         run: |
           DATE=$(date +"%Y.%m.%d")
           MAX_REV=$(git tag -l "${DATE}-r*" | sed "s/${DATE}-r//" | sort -n | tail -n1)
@@ -229,7 +241,7 @@ jobs:
             ### 🚀 Build Information
             | Component | Details |
             | :--- | :--- |
-            | **Kernel Base** | Sultan ($SULTAN_TAG) |
+            | **Kernel Base** | Sultan ($S_TAG) |
             | **Manager** | [backslashxx/KernelSU](https://github.com/backslashxx/KernelSU) |
             | **xxKSU Ver** | \`r$KSU_VER\` |
             | **Compiler** | GCC 14.2.0 |
