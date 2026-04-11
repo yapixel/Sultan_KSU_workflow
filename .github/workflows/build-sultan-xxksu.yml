@@ -82,8 +82,11 @@ jobs:
 
       - name: Inject Configuration
         working-directory: sultan
+        env:
+          CROSS_COMPILE: ${{ env.GCC_PATH }}
+          CC: ${{ env.GCC_PATH }}gcc
         run: |
-          make O=out ${{ matrix.defconfig }}
+          make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" ${{ matrix.defconfig }}
           cat >> out/.config <<EOF
           # ----- Networking / BBR / ipset / VPN Egress configs ----------------------------
           CONFIG_NETFILTER_ADVANCED=y
@@ -158,20 +161,15 @@ jobs:
           CHECK_FLAGS=(
             CONFIG_NETFILTER_ADVANCED
             CONFIG_NETFILTER_XT_MATCH_ADDRTYPE
-            CONFIG_IP_NF_MATCH_ADDRTYPE
             CONFIG_IP_SET
-            CONFIG_IP_MULTIPLE_TABLES
-            CONFIG_XFRM_STATISTICS
             CONFIG_TCP_CONG_BBR
             CONFIG_KSU
-            CONFIG_KSU_TAMPER_SYSCALL_TABLE
+            CONFIG_XFRM_STATISTICS
           )
           for flag in "${CHECK_FLAGS[@]}"; do
             grep "^${flag}=" out/.config || echo "${flag} is NOT SET"
           done
           echo "=========================================="
-          
-          # Blueprint Fail-Fast
           grep "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y" out/.config || { echo "::error::ADDRTYPE injection failed. Aborting build."; exit 1; }
 
       - name: Build Kernel
