@@ -181,16 +181,45 @@ jobs:
       contents: write
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
       - name: Download build artifacts
         uses: actions/download-artifact@v8
         with:
           path: ./artifacts
 
+      - name: Generate Revision Tag
+        id: tag_logic
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 1. Matches your screenshot format (YYYY.MM.DD)
+          BASE_TAG="$(date +"%Y.%m.%d")"
+          
+          # 2. Extract highest revision number from existing tags
+          MAX_REV=$(git tag -l "${BASE_TAG}-r*" | sed "s/${BASE_TAG}-r//" | sort -n | tail -n1)
+          if [ -z "$MAX_REV" ]; then MAX_REV=0; fi
+          
+          # 3. Final Tag
+          NEXT_REV=$(( MAX_REV + 1 ))
+          FINAL_TAG="${BASE_TAG}-r${NEXT_REV}"
+          
+          echo "FINAL_TAG=$FINAL_TAG" >> "$GITHUB_ENV"
+          
+          # 4. Push tag FIRST to satisfy GitHub API
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "$FINAL_TAG"
+          git push origin "$FINAL_TAG"
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2.6.1
         with:
-          tag_name: "Build-$(date +'%Y.%m.%d-%H%M')"
-          name: "Kernel Build — $(date +'%Y.%m.%d')"
+          tag_name: ${{ env.FINAL_TAG }}
+          name: "Kernel Build — ${{ env.FINAL_TAG }}"
           body: |
             ### 🚀 Build Information
             | Component | Details |
