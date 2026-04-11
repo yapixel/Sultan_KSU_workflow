@@ -192,17 +192,22 @@ jobs:
         run: |
           make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" -j"$(nproc --all)"
           
-          # Object Verification (Blueprint Truth Test)
-          echo "=========================================="
-          echo "      OBJECT FILE VERIFICATION            "
-          echo "=========================================="
-          if [ ! -f "out/net/netfilter/xt_ADDRTYPE.o" ]; then
-            echo "::error::xt_ADDRTYPE.o was NOT compiled. Feature stripped!"
-            exit 1
+          echo "=== Blueprint Truth Test: atp4pixel / VPN Readiness ==="
+          # Define the targets we need
+          TARGETS=("xt_ADDRTYPE" "xt_TCPMSS" "xfrm_state")
+ 
+          for target in "${TARGETS[@]}"; do
+          # Search for the object or the module in the output directory
+          FOUND=$(find out/ -name "${target}.o" -o -name "${target}.ko" | head -n 1)
+  
+          if [ -n "$FOUND" ]; then
+           echo "SUCCESS: $target found at $FOUND"
           else
-            echo "SUCCESS: xt_ADDRTYPE.o confirmed."
+           echo "::error::Critical component $target missing from build output!"
+          exit 1
           fi
-          echo "=========================================="
+          done
+
 
       - name: Package
         run: |
