@@ -44,7 +44,7 @@ jobs:
 
     outputs:
       ksu_ver: ${{ steps.meta.outputs.ksu_ver }}
-      s_tag: ${{ steps.meta.outputs.sultan_tag }}
+      s_tag: ${{ steps.meta.outputs.s_tag }}
 
     steps:
       - uses: actions/checkout@v6
@@ -70,7 +70,7 @@ jobs:
           S_TAG=$(git -C sultan tag --sort=-committerdate | head -n1 || echo "latest")
           K_VER=$(./sh/get_ksuver.sh "backslashxx" "KernelSU" "${{ env.KSU_BRANCH }}" || echo "unknown")
           echo "ksu_ver=$K_VER" >> "$GITHUB_OUTPUT"
-          echo "sultan_tag=$S_TAG" >> "$GITHUB_OUTPUT"
+          echo "s_tag=$S_TAG" >> "$GITHUB_OUTPUT"
 
       - name: KSU & Patches
         working-directory: sultan
@@ -80,6 +80,20 @@ jobs:
           patch -p1 < ../kernel_patches/sultan/61_scripts_setlocalversion.patch
           patch -p1 < ../kernel_patches/sultan/62_init_Makefile.patch
 
+      - name: Global Defconfig Analysis
+        working-directory: sultan
+        run: |
+          echo "=== Scanning All Relevant Defconfigs ==="
+          TARGET_DEFS=("gs201_defconfig" "zuma_defconfig" "zumapro_defconfig")
+          CHECK_FLAGS=("CONFIG_NETFILTER_ADVANCED" "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE" "CONFIG_KSU")
+          for def in "${TARGET_DEFS[@]}"; do
+            CONF_PATH="arch/arm64/configs/$def"
+            echo "[*] Checking $def..."
+            for flag in "${CHECK_FLAGS[@]}"; do
+              grep "$flag" "$CONF_PATH" || echo "  - $flag: missing"
+            done
+          done
+
       - name: Inject Configuration
         working-directory: sultan
         env:
@@ -87,70 +101,73 @@ jobs:
           CC: ${{ env.GCC_PATH }}gcc
         run: |
           make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" ${{ matrix.defconfig }}
-          cat >> out/.config <<EOF
-          # ----- Networking / BBR / ipset / VPN Egress configs ----------------------------
-          CONFIG_NETFILTER_ADVANCED=y
-          CONFIG_TMPFS_XATTR=y
-          CONFIG_TMPFS_POSIX_ACL=y
-          CONFIG_IP_NF_TARGET_TTL=y
-          CONFIG_IP6_NF_TARGET_HL=y
-          CONFIG_IP6_NF_MATCH_HL=y
-          CONFIG_TCP_CONG_ADVANCED=y
-          CONFIG_TCP_CONG_BBR=y
-          CONFIG_NET_SCH_FQ=y
-          CONFIG_TCP_CONG_BIC=n
-          CONFIG_TCP_CONG_WESTWOOD=n
-          CONFIG_TCP_CONG_HTCP=n
-          CONFIG_DEFAULT_BBR=y
-          CONFIG_BPF_STREAM_PARSER=y
-          CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y
-          CONFIG_NETFILTER_XT_SET=y
-          CONFIG_IP_SET=y
-          CONFIG_IP_SET_MAX=65534
-          CONFIG_IP_SET_BITMAP_IP=y
-          CONFIG_IP_SET_BITMAP_IPMAC=y
-          CONFIG_IP_SET_BITMAP_PORT=y
-          CONFIG_IP_SET_HASH_IP=y
-          CONFIG_IP_SET_HASH_IPMARK=y
-          CONFIG_IP_SET_HASH_IPPORT=y
-          CONFIG_IP_SET_HASH_IPPORTIP=y
-          CONFIG_IP_SET_HASH_IPPORTNET=y
-          CONFIG_IP_SET_HASH_IPMAC=y
-          CONFIG_IP_SET_HASH_MAC=y
-          CONFIG_IP_SET_HASH_NETPORTNET=y
-          CONFIG_IP_SET_HASH_NET=y
-          CONFIG_IP_SET_HASH_NETNET=y
-          CONFIG_IP_SET_HASH_NETPORT=y
-          CONFIG_IP_SET_HASH_NETIFACE=y
-          CONFIG_IP_SET_LIST_SET=y
-          CONFIG_NETFILTER_XT_TARGET_TPROXY=y
-          CONFIG_NETFILTER_XT_TARGET_REDIRECT=y
-          CONFIG_NETFILTER_XT_MATCH_SOCKET=y
-          CONFIG_NETFILTER_XT_MATCH_MARK=y
-          CONFIG_NETFILTER_XT_MATCH_IPRANGE=y
-          CONFIG_NETFILTER_XT_MATCH_OWNER=y
-          CONFIG_NETFILTER_XT_MATCH_MAC=y
-          CONFIG_NETFILTER_XT_MATCH_CONNTRACK=y
-          CONFIG_NETFILTER_XT_MARK=y
-          CONFIG_NETFILTER_XT_CONNMARK=y
-          CONFIG_NETFILTER_XT_TARGET_CONNMARK=y
-          CONFIG_IP6_NF_NAT=y
-          CONFIG_IP6_NF_TARGET_REDIRECT=y
-          CONFIG_IP6_NF_TARGET_MASQUERADE=y
-          CONFIG_IP_MULTIPLE_TABLES=y
-          CONFIG_IPV6_MULTIPLE_TABLES=y
-          CONFIG_XFRM_SUB_POLICY=y
-          CONFIG_XFRM_STATISTICS=y
-          # ----- KernelSU configs ------------------------------------
-          CONFIG_KSU=y
-          CONFIG_KSU_EXTRAS=y
-          CONFIG_KSU_ALLOWLIST_WORKAROUND=n
-          CONFIG_KSU_DEBUG=n
-          CONFIG_KSU_KPROBES_HOOK=n
-          CONFIG_KSU_TAMPER_SYSCALL_TABLE=y
-          CONFIG_KSU_LSM_SECURITY_HOOKS=y
-          CONFIG_KSU_THRONE_TRACKER_ALWAYS_THREADED=y
-          EOF
+          EXTRA_CONFIGS=(
+            CONFIG_NETFILTER_ADVANCED=y
+            CONFIG_TMPFS_XATTR=y
+            CONFIG_TMPFS_POSIX_ACL=y
+            CONFIG_IP_NF_TARGET_TTL=y
+            CONFIG_IP6_NF_TARGET_HL=y
+            CONFIG_IP6_NF_MATCH_HL=y
+            CONFIG_TCP_CONG_ADVANCED=y
+            CONFIG_TCP_CONG_BBR=y
+            CONFIG_NET_SCH_FQ=y
+            CONFIG_TCP_CONG_BIC=n
+            CONFIG_TCP_CONG_WESTWOOD=n
+            CONFIG_TCP_CONG_HTCP=n
+            CONFIG_DEFAULT_BBR=y
+            CONFIG_BPF_STREAM_PARSER=y
+            CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y
+            CONFIG_NETFILTER_XT_SET=y
+            CONFIG_IP_SET=y
+            CONFIG_IP_SET_MAX=65534
+            CONFIG_IP_SET_BITMAP_IP=y
+            CONFIG_IP_SET_BITMAP_IPMAC=y
+            CONFIG_IP_SET_BITMAP_PORT=y
+            CONFIG_IP_SET_HASH_IP=y
+            CONFIG_IP_SET_HASH_IPMARK=y
+            CONFIG_IP_SET_HASH_IPPORT=y
+            CONFIG_IP_SET_HASH_IPPORTIP=y
+            CONFIG_IP_SET_HASH_IPPORTNET=y
+            CONFIG_IP_SET_HASH_IPMAC=y
+            CONFIG_IP_SET_HASH_MAC=y
+            CONFIG_IP_SET_HASH_NETPORTNET=y
+            CONFIG_IP_SET_HASH_NET=y
+            CONFIG_IP_SET_HASH_NETNET=y
+            CONFIG_IP_SET_HASH_NETPORT=y
+            CONFIG_IP_SET_HASH_NETIFACE=y
+            CONFIG_IP_SET_LIST_SET=y
+            CONFIG_NETFILTER_XT_TARGET_TPROXY=y
+            CONFIG_NETFILTER_XT_TARGET_REDIRECT=y
+            CONFIG_NETFILTER_XT_MATCH_SOCKET=y
+            CONFIG_NETFILTER_XT_MATCH_MARK=y
+            CONFIG_NETFILTER_XT_MATCH_IPRANGE=y
+            CONFIG_NETFILTER_XT_MATCH_OWNER=y
+            CONFIG_NETFILTER_XT_MATCH_MAC=y
+            CONFIG_NETFILTER_XT_MATCH_CONNTRACK=y
+            CONFIG_NETFILTER_XT_MARK=y
+            CONFIG_NETFILTER_XT_CONNMARK=y
+            CONFIG_NETFILTER_XT_TARGET_CONNMARK=y
+            CONFIG_IP6_NF_NAT=y
+            CONFIG_IP6_NF_TARGET_REDIRECT=y
+            CONFIG_IP6_NF_TARGET_MASQUERADE=y
+            CONFIG_IP_MULTIPLE_TABLES=y
+            CONFIG_IPV6_MULTIPLE_TABLES=y
+            CONFIG_XFRM_SUB_POLICY=y
+            CONFIG_XFRM_STATISTICS=y
+            CONFIG_KSU=y
+            CONFIG_KSU_EXTRAS=y
+            CONFIG_KSU_ALLOWLIST_WORKAROUND=n
+            CONFIG_KSU_DEBUG=n
+            CONFIG_KSU_KPROBES_HOOK=n
+            CONFIG_KSU_TAMPER_SYSCALL_TABLE=y
+            CONFIG_KSU_LSM_SECURITY_HOOKS=y
+            CONFIG_KSU_THRONE_TRACKER_ALWAYS_THREADED=y
+          )
+          for cfg in "${EXTRA_CONFIGS[@]}"; do
+            key="${cfg%%=*}"
+            sed -i "/${key}/d" out/.config
+            echo "$cfg" >> out/.config
+          done
 
       - name: Configuration Debugger
         working-directory: sultan
@@ -158,19 +175,12 @@ jobs:
           echo "=========================================="
           echo "      KERNEL CONFIGURATION STATUS         "
           echo "=========================================="
-          CHECK_FLAGS=(
-            CONFIG_NETFILTER_ADVANCED
-            CONFIG_NETFILTER_XT_MATCH_ADDRTYPE
-            CONFIG_IP_SET
-            CONFIG_TCP_CONG_BBR
-            CONFIG_KSU
-            CONFIG_XFRM_STATISTICS
-          )
+          CHECK_FLAGS=(CONFIG_NETFILTER_ADVANCED CONFIG_NETFILTER_XT_MATCH_ADDRTYPE CONFIG_IP_SET CONFIG_TCP_CONG_BBR CONFIG_KSU CONFIG_XFRM_STATISTICS)
           for flag in "${CHECK_FLAGS[@]}"; do
             grep "^${flag}=" out/.config || echo "${flag} is NOT SET"
           done
           echo "=========================================="
-          grep "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y" out/.config || { echo "::error::ADDRTYPE injection failed. Aborting build."; exit 1; }
+          grep "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y" out/.config || { echo "::error::ADDRTYPE injection failed!"; exit 1; }
 
       - name: Build Kernel
         working-directory: sultan
@@ -181,18 +191,10 @@ jobs:
           CC: ${{ env.GCC_PATH }}gcc
         run: |
           make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" -j"$(nproc --all)"
-          
-          # OBJECT VERIFICATION STEP
-          echo "=========================================="
-          echo "      OBJECT FILE VERIFICATION            "
-          echo "=========================================="
-          if [ -f "out/net/netfilter/xt_ADDRTYPE.o" ]; then
-            echo "SUCCESS: xt_ADDRTYPE.o found."
-          else
-            echo "::error::xt_ADDRTYPE.o was NOT compiled. The kernel stripped the feature!"
+          if [ ! -f "out/net/netfilter/xt_ADDRTYPE.o" ]; then
+            echo "::error::xt_ADDRTYPE.o was NOT compiled. Feature stripped!"
             exit 1
           fi
-          echo "=========================================="
 
       - name: Package
         run: |
@@ -234,7 +236,6 @@ jobs:
           git config user.email "actions@github.com"
           git tag "$TAG"
           git push origin "$TAG"
-          
           gh release create "$TAG" artifacts/**/*.zip \
             --title "Kernel Build — $TAG" \
             --notes "
@@ -249,6 +250,4 @@ jobs:
             ### 🛠️ Networking Features (Fortress)
             - **TCP Congestion:** BBR (v1) + FQ
             - **Routing:** Policy Routing (Table 1066) + IPSet (64k)
-            - **Fixes:** ADDRTYPE Match, Google VPN (XFRM), TTL 64 Share
-            
-            > Built for Pixel 7 (gs201), Pixel 8 (zuma), and Pixel 9 (zumapro)."
+            - **Fixes:** ADDRTYPE Match, Google VPN (XFRM), TTL 64 Share"
