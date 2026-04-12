@@ -76,17 +76,23 @@ jobs:
           echo "ksu_ver=${K_VER}" >> "$GITHUB_OUTPUT"
           echo "susfs_ver=${SU_VER}" >> "$GITHUB_OUTPUT"
 
-      - name: Setup Kernel Configs
+      - name: Setup Kernel Configs and Integrate xxKSU
         run: |
           cd sultan
-          DEFCONFIG="arch/arm64/configs/${{ matrix.kernel.defconfig }}"
           
-          # Merge verified ksun_sus.config
+          # 1. Integrate Submodule per Makefile logic
+          if [ -d "drivers" ]; then DRIVER_DIR="drivers"; else DRIVER_DIR="common/drivers"; fi
+          ln -sf "$(realpath --relative-to="$DRIVER_DIR" "KernelSU/kernel")" "$DRIVER_DIR/kernelsu"
+          grep -q "kernelsu" "$DRIVER_DIR/Makefile" || printf "\nobj-\$(CONFIG_KSU) += kernelsu/\n" >> "$DRIVER_DIR/Makefile"
+          grep -q "source \"drivers/kernelsu/Kconfig\"" "$DRIVER_DIR/Kconfig" || sed -i "/endmenu/i\source \"drivers/kernelsu/Kconfig\"" "$DRIVER_DIR/Kconfig"
+
+          # 2. Apply Configs (ksun_sus.config + atp4pixel Pillars)
+          DEFCONFIG="arch/arm64/configs/${{ matrix.kernel.defconfig }}"
           echo "" >> "$DEFCONFIG"
           cat arch/arm64/configs/ksun_sus.config >> "$DEFCONFIG"
 
-          # Inject atp4pixel / Advanced Networking Pillars
           cat <<EOF >> "$DEFCONFIG"
+          # atp4pixel Master Spec
           CONFIG_NETFILTER_ADVANCED=y
           CONFIG_IP_NF_TARGET_TTL=y
           CONFIG_IP6_NF_TARGET_HL=y
@@ -149,7 +155,7 @@ jobs:
           CONFIG_INOTIFY_USER=y
           EOF
 
-          # Guardrails
+          # 3. Guardrails
           sed -i 's/CONFIG_TCP_CONG_BIC=y/CONFIG_TCP_CONG_BIC=n/' "$DEFCONFIG"
           sed -i 's/CONFIG_TCP_CONG_WESTWOOD=y/CONFIG_TCP_CONG_WESTWOOD=n/' "$DEFCONFIG"
           sed -i 's/CONFIG_TCP_CONG_HTCP=y/CONFIG_TCP_CONG_HTCP=n/' "$DEFCONFIG"
@@ -166,7 +172,6 @@ jobs:
           CROSS_COMPILE: ${{ env.TOOLCHAIN_PATH }}
           CC: ${{ env.TOOLCHAIN_PATH }}gcc
         run: |
-          # Configure and Parallel build on all available cores
           make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" ${{ matrix.kernel.defconfig }}
           make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" -j"$(nproc --all)"
 
@@ -179,7 +184,6 @@ jobs:
             cp sultan/out/arch/arm64/boot/Image AK3/Image
           fi
           cat sultan/out/${{ matrix.kernel.dtb_path }}/*.dtb > AK3/dtb
-          
           ZIP_NAME="Sultan-${{ matrix.kernel.codename }}-${{ steps.meta.outputs.sultan_tag }}-atp4ksu.zip"
           ( cd AK3 && zip -r9 "../${ZIP_NAME}" . -x "*.git*" )
           echo "ZIP_PATH=$GITHUB_WORKSPACE/${ZIP_NAME}" >> "$GITHUB_ENV"
