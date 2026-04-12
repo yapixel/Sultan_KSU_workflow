@@ -1,0 +1,216 @@
+name: Build Sultan + xxKSU + SUSFS
+
+permissions:
+  contents: write
+  actions: write
+
+on:
+  workflow_dispatch:
+
+env:
+  ANYKERNEL_REPO: https://github.com/TheWildJames/AnyKernel3.git
+  PATCHES_REPO: https://github.com/yapixel/kernel_patches
+  SCRIPTS_REPO: https://github.com/TheSillyOk/sh
+  KSU_BRANCH: master
+  ANDROID_VERSION: "14"
+  KERNEL_VERSION: "6.1"
+  GCC_VERSION: "14.2.0"
+  GCC_ARCHIVE_URL: "https://kernel.org/pub/tools/crosstool/files/bin/x86_64/14.2.0/x86_64-gcc-14.2.0-nolibc-aarch64-linux.tar.gz"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      sultan_tag: ${{ steps.meta.outputs.sultan_tag }}
+      ksu_ver: ${{ steps.meta.outputs.ksu_ver }}
+      susfs_ver: ${{ steps.meta.outputs.susfs_ver }}
+    strategy:
+      fail-fast: false
+      matrix:
+        kernel:
+          - codename: gs201
+            kernel_repo: "https://github.com/yapixel/anaconda_kernel_google_tensynos"
+            kernel_branch: "anaconda-tensynos-qpr3"
+            anykernel_branch: "sultan-gs201"
+            defconfig: gs201_defconfig
+            dtb_path: "google-devices/gs201/dts"
+          - codename: zuma
+            kernel_repo: "https://github.com/yapixel/anaconda_kernel_google_tensynos"
+            kernel_branch: "anaconda-tensynos-qpr3"
+            anykernel_branch: "sultan-zuma"
+            defconfig: zuma_defconfig
+            dtb_path: "google-devices/zuma/dts"
+          - codename: zumapro
+            kernel_repo: "https://github.com/yapixel/anaconda_kernel_google_tensynos"
+            kernel_branch: "anaconda-tensynos-qpr3"
+            anykernel_branch: "sultan-zumapro"
+            defconfig: zumapro_defconfig
+            dtb_path: "google-devices/zumapro/dts"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install GCC ${{ env.GCC_VERSION }}
+        run: |
+          wget -q "${{ env.GCC_ARCHIVE_URL }}" -O gcc.tar.gz
+          tar -xf gcc.tar.gz
+          echo "TOOLCHAIN_PATH=$GITHUB_WORKSPACE/gcc-14.2.0-nolibc/aarch64-linux/bin/aarch64-linux-" >> $GITHUB_ENV
+
+      - name: Clone source and dependencies
+        run: |
+          # Main kernel source
+          git clone --depth=1 "${{ matrix.kernel.kernel_repo }}" -b "${{ matrix.kernel.kernel_branch }}" sultan
+          
+          # Initialize xxKSU submodule as requested
+          cd sultan
+          git submodule update --init --recursive
+          cd ..
+
+          # External components
+          git clone --depth=1 "${{ env.ANYKERNEL_REPO }}" -b "${{ matrix.kernel.anykernel_branch }}" AK3
+          git clone --depth=1 "${{ env.PATCHES_REPO }}" -b dev kernel_patches
+          git clone --depth=1 "${{ env.SCRIPTS_REPO }}" sh
+
+      - name: Collect build metadata
+        id: meta
+        run: |
+          S_TAG=$(git -C sultan rev-parse --short HEAD)
+          chmod +x sh/get_ksuver.sh
+          # Extract KSU and SUSFS versions from the integrated source
+          K_VER=$(./sh/get_ksuver.sh "backslashxx" "KernelSU" "${{ env.KSU_BRANCH }}" || echo "integrated")
+          SU_VER=$(grep -m1 'define SUSFS_VERSION' sultan/include/linux/susfs.h | grep -oP '".*?"' | tr -d '"' || echo "unknown")
+          
+          echo "sultan_tag=${S_TAG}" >> "$GITHUB_OUTPUT"
+          echo "ksu_ver=${K_VER}" >> "$GITHUB_OUTPUT"
+          echo "susfs_ver=${SU_VER}" >> "$GITHUB_OUTPUT"
+
+      - name: Apply build-reproducibility patches
+        working-directory: sultan
+        run: |
+          PATCHES=(
+            "../kernel_patches/sultan/60_scripts_mkcompile_h.patch"
+            "../kernel_patches/sultan/61_scripts_setlocalversion.patch"
+            "../kernel_patches/sultan/62_init_Makefile.patch"
+          )
+          for p in "${PATCHES[@]}"; do
+            if [ -f "$p" ]; then
+              patch -p1 < "$p"
+            else
+              echo "Optional patch $p not found, skipping."
+            fi
+          done
+
+      - name: Setup Kernel Configs
+        run: |
+          cd sultan
+          DEFCONFIG="arch/arm64/configs/${{ matrix.kernel.defconfig }}"
+          
+          # Networking / BBR / IPSet
+          EXTRA_CONFIGS=(
+            CONFIG_TMPFS_XATTR=y CONFIG_TMPFS_POSIX_ACL=y CONFIG_IP_NF_TARGET_TTL=y
+            CONFIG_IP6_NF_TARGET_HL=y CONFIG_IP6_NF_MATCH_HL=y CONFIG_TCP_CONG_ADVANCED=y
+            CONFIG_TCP_CONG_BBR=y CONFIG_NET_SCH_FQ=y CONFIG_DEFAULT_BBR=y
+            CONFIG_IP_SET=y CONFIG_IP_SET_MAX=65534 CONFIG_NETFILTER_XT_TARGET_TPROXY=y
+            CONFIG_NETFILTER_XT_TARGET_REDIRECT=y CONFIG_IP6_NF_NAT=y
+          )
+          for cfg in "${EXTRA_CONFIGS[@]}"; do
+            key="${cfg%%=*}"; sed -i -E "s/.*${key}=.*$/# ${key} removed/g" "$DEFCONFIG"; echo "$cfg" >> "$DEFCONFIG"
+          done
+
+          # xxKSU + SUSFS logic
+          KSU_CONFIGS=(
+            CONFIG_KSU=y CONFIG_KSU_EXTRAS=y CONFIG_KSU_TAMPER_SYSCALL_TABLE=y
+            CONFIG_KSU_LSM_SECURITY_HOOKS=y CONFIG_KSU_SUSFS_SUS_PATH=y
+            CONFIG_KSU_SUSFS_SUS_MOUNT=y CONFIG_KSU_SUSFS_SUS_KSTAT=y
+            CONFIG_KSU_SUSFS_SPOOF_UNAME=y CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+            CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+            CONFIG_WERROR=n
+          )
+          for cfg in "${KSU_CONFIGS[@]}"; do
+            key="${cfg%%=*}"; sed -i -E "s/.*${key}=.*$//g" "$DEFCONFIG"; echo "$cfg" >> "$DEFCONFIG"
+          done
+
+          # Disable KPROBES for Sultan stability
+          sed -i 's/CONFIG_KPROBES=y/# CONFIG_KPROBES is not set/' "$DEFCONFIG"
+          sed -i '/CONFIG_KPROBES/d' "$DEFCONFIG"
+          echo "# CONFIG_KPROBES is not set" >> "$DEFCONFIG"
+
+      - name: Build kernel
+        working-directory: sultan
+        env:
+          CROSS_COMPILE: ${{ env.TOOLCHAIN_PATH }}
+          CC: ${{ env.TOOLCHAIN_PATH }}gcc
+          KBUILD_BUILD_USER: build-user
+          KBUILD_BUILD_HOST: build-host
+        run: |
+          make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" ${{ matrix.kernel.defconfig }}
+          make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" -j"$(nproc --all)"
+
+      - name: Package AnyKernel3
+        id: package
+        run: |
+          if [ -f sultan/out/arch/arm64/boot/Image.lz4 ]; then
+            cp sultan/out/arch/arm64/boot/Image.lz4 AK3/Image.lz4
+          else
+            cp sultan/out/arch/arm64/boot/Image AK3/Image
+          fi
+          cat sultan/out/${{ matrix.kernel.dtb_path }}/*.dtb > AK3/dtb
+
+          S_TAG="${{ steps.meta.outputs.sultan_tag }}"
+          K_VER="${{ steps.meta.outputs.ksu_ver }}"
+          SU_VER="${{ steps.meta.outputs.susfs_ver }}"
+
+          ZIP_NAME="Sultan-${{ matrix.kernel.codename }}-${S_TAG}-xxKSU-r${K_VER}-SUSFS-${SU_VER}.zip"
+          echo "artifact_name=Sultan-${{ matrix.kernel.codename }}-${S_TAG}-xxKSU-r${K_VER}-SUSFS-${SU_VER}" >> "$GITHUB_OUTPUT"
+          ( cd AK3 && zip -r9 "../${ZIP_NAME}" . -x "*.git*" )
+          echo "ZIP_PATH=$GITHUB_WORKSPACE/${ZIP_NAME}" >> "$GITHUB_ENV"
+
+      - name: Upload kernel ZIP
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.package.outputs.artifact_name }}
+          path: ${{ env.ZIP_PATH }}
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: ./artifacts
+          merge-multiple: true
+      - name: Generate unique release tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BASE_TAG="$(date +"%Y.%m.%d")"
+          ALL_TAGS=$(gh api "repos/${{ github.repository }}/tags" --paginate --jq '.[].name' 2>/dev/null || true)
+          MAX_REV=0
+          while IFS= read -r tag; do
+            if [[ "$tag" == "${BASE_TAG}-r"* ]]; then
+              REV="${tag##*-r}"
+              [[ "$REV" =~ ^[0-9]+$ ]] && (( REV > MAX_REV )) && MAX_REV="$REV"
+            fi
+          done <<< "$ALL_TAGS"
+          echo "RELEASE_TAG=${BASE_TAG}-r$(( MAX_REV + 1 ))" >> "$GITHUB_ENV"
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: Sultan Kernel — ${{ env.RELEASE_TAG }}
+          body: |
+            ## Build Metadata
+            - **Commit:** `${{ needs.build.outputs.sultan_tag }}`
+            - **xxKSU Version:** `r${{ needs.build.outputs.ksu_ver }}`
+            - **SUSFS Version:** `${{ needs.build.outputs.susfs_ver }}`
+          files: artifacts/*.zip
