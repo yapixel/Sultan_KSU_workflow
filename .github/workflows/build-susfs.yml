@@ -81,13 +81,12 @@ jobs:
           cd sultan
           DEFCONFIG="arch/arm64/configs/${{ matrix.kernel.defconfig }}"
           
-          # 1. Inject SUSFS/xxKSU verified config
+          # Merge verified ksun_sus.config
           echo "" >> "$DEFCONFIG"
           cat arch/arm64/configs/ksun_sus.config >> "$DEFCONFIG"
 
-          # 2. Inject Pillars 1-4 (Advanced Networking, VPN, IPSet, BBR)
+          # Inject atp4pixel / Advanced Networking Pillars
           cat <<EOF >> "$DEFCONFIG"
-          # atp4pixel / Advanced Networking
           CONFIG_NETFILTER_ADVANCED=y
           CONFIG_IP_NF_TARGET_TTL=y
           CONFIG_IP6_NF_TARGET_HL=y
@@ -110,8 +109,6 @@ jobs:
           CONFIG_IP6_NF_TARGET_MASQUERADE=y
           CONFIG_IP_MULTIPLE_TABLES=y
           CONFIG_IPV6_MULTIPLE_TABLES=y
-
-          # Google VPN (XFRM) Coexistence
           CONFIG_XFRM_ALGO=y
           CONFIG_INET_IPCOMP=y
           CONFIG_INET_XFRM_TUNNEL=y
@@ -120,8 +117,6 @@ jobs:
           CONFIG_XFRM_SUB_POLICY=y
           CONFIG_INET_XFRM_MODE_TUNNEL=y
           CONFIG_XFRM_STATISTICS=y
-
-          # IPSet Full Suite
           CONFIG_IP_SET=y
           CONFIG_NETFILTER_XT_SET=y
           CONFIG_IP_SET_MAX=65534
@@ -141,14 +136,10 @@ jobs:
           CONFIG_IP_SET_HASH_NETPORT=y
           CONFIG_IP_SET_HASH_NETIFACE=y
           CONFIG_IP_SET_LIST_SET=y
-
-          # TCP Congestion & BBR
           CONFIG_TCP_CONG_ADVANCED=y
           CONFIG_TCP_CONG_BBR=y
           CONFIG_NET_SCH_FQ=y
           CONFIG_DEFAULT_BBR=y
-          
-          # System / CGROUPS
           CONFIG_SECURITY_NETWORK=y
           CONFIG_CGROUPS=y
           CONFIG_CGROUP_BPF=y
@@ -158,8 +149,7 @@ jobs:
           CONFIG_INOTIFY_USER=y
           EOF
 
-          # 3. Clean up conflicts and Stability Guardrails
-          # Force set n for competing congestion algorithms and KPROBES
+          # Guardrails
           sed -i 's/CONFIG_TCP_CONG_BIC=y/CONFIG_TCP_CONG_BIC=n/' "$DEFCONFIG"
           sed -i 's/CONFIG_TCP_CONG_WESTWOOD=y/CONFIG_TCP_CONG_WESTWOOD=n/' "$DEFCONFIG"
           sed -i 's/CONFIG_TCP_CONG_HTCP=y/CONFIG_TCP_CONG_HTCP=n/' "$DEFCONFIG"
@@ -168,12 +158,15 @@ jobs:
           echo "# CONFIG_KPROBES is not set" >> "$DEFCONFIG"
           echo "CONFIG_WERROR=n" >> "$DEFCONFIG"
 
-      - name: Build kernel
+      - name: Build Kernel (Production)
         working-directory: sultan
         env:
+          KBUILD_BUILD_USER: build-user
+          KBUILD_BUILD_HOST: build-host
           CROSS_COMPILE: ${{ env.TOOLCHAIN_PATH }}
           CC: ${{ env.TOOLCHAIN_PATH }}gcc
         run: |
+          # Configure and Parallel build on all available cores
           make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" ${{ matrix.kernel.defconfig }}
           make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" -j"$(nproc --all)"
 
@@ -196,30 +189,3 @@ jobs:
         with:
           name: ${{ matrix.kernel.codename }}-kernel
           path: ${{ env.ZIP_PATH }}
-
-  release:
-    name: Create GitHub Release
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-      - name: Download build artifacts
-        uses: actions/download-artifact@v8
-        with:
-          path: ./artifacts
-          merge-multiple: true
-      - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: "atp4ksu-$(date +'%Y.%m.%d-%H%M')"
-          name: Sultan Kernel — atp4ksu Spec
-          body: |
-            ## Build Metadata
-            - **Commit:** `${{ needs.build.outputs.sultan_tag }}`
-            - **xxKSU Version:** `r${{ needs.build.outputs.ksu_ver }}`
-            - **SUSFS Version:** `${{ needs.build.outputs.susfs_ver }}`
-            - **Specs:** atp4pixel Master Spec (Pillars 1-4)
-          files: artifacts/*.zip
