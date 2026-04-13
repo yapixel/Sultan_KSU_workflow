@@ -243,6 +243,8 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           path: ./artifacts
+          # Added this single parameter to flatten the directory structure 
+          # so artifacts/**/*.zip can actually find the files.
           merge-multiple: true
       - name: Tag and Release
         env:
@@ -262,6 +264,8 @@ jobs:
           git tag "$TAG"
           git push origin "$TAG"
           
+          # Now the glob will find the files because merge-multiple: true 
+          # placed them directly inside ./artifacts/
           gh release create "$TAG" artifacts/**/*.zip \
             --title "Kernel Build — $TAG" \
             --notes "
