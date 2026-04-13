@@ -74,11 +74,7 @@ jobs:
             "../kernel_patches/sultan/62_init_Makefile.patch"
           )
           for p in "${PATCHES[@]}"; do
-            if [ -f "$p" ]; then
-              patch -p1 < "$p"
-            else
-              echo "Optional patch $p not found, skipping."
-            fi
+            [ -f "$p" ] && patch -p1 < "$p" || echo "Optional patch $p skipped."
           done
 
       - name: Collect build metadata
@@ -87,10 +83,8 @@ jobs:
           S_TAG=$(git -C sultan rev-parse --short HEAD)
           chmod +x sh/get_ksuver.sh
           K_VER=$(./sh/get_ksuver.sh "backslashxx" "KernelSU" "${{ env.KSU_BRANCH }}" || echo "integrated")
-          SU_VER=$(grep -m1 'define SUSFS_VERSION' sultan/include/linux/susfs.h | grep -oP '".*?"' | tr -d '"' || echo "integrated")
           echo "sultan_tag=${S_TAG}" >> "$GITHUB_OUTPUT"
           echo "ksu_ver=${K_VER}" >> "$GITHUB_OUTPUT"
-          echo "susfs_ver=${SU_VER}" >> "$GITHUB_OUTPUT"
 
       - name: Integrate xxKSU Submodule
         run: |
@@ -108,7 +102,7 @@ jobs:
           cat arch/arm64/configs/ksun_sus.config >> "$DEFCONFIG"
 
           cat <<EOF >> "$DEFCONFIG"
-          # Pillars 1-4 (Networking, VPN, IPSet, BBR)
+          # atp4pixel Pillars
           CONFIG_NETFILTER_ADVANCED=y
           CONFIG_IP_NF_TARGET_TTL=y
           CONFIG_IP6_NF_TARGET_HL=y
@@ -211,46 +205,47 @@ jobs:
           path: ${{ env.ZIP_PATH }}
 
   release:
-    name: Create GitHub Release
     needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@v8
         with:
           path: ./artifacts
           merge-multiple: true
-
-      - name: Generate and Push Sequential Tag
+      - name: Tag and Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KSU_VER: ${{ needs.build.outputs.ksu_ver }}
+          S_TAG: ${{ needs.build.outputs.sultan_tag }}
         run: |
           DATE=$(date +"%Y.%m.%d")
           MAX_REV=$(git tag -l "${DATE}-r*" | sed "s/${DATE}-r//" | sort -n | tail -n1)
           REV=$(( ${MAX_REV:-0} + 1 ))
           TAG="${DATE}-r${REV}"
-          echo "RELEASE_TAG=${TAG}" >> $GITHUB_ENV
-          
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git tag "$TAG"
           git push origin "$TAG"
-
-      - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          name: Sultan Kernel — ${{ env.RELEASE_TAG }}
-          body: |
-            ## Build Metadata
-            - **Toolchain:** GCC `${{ env.GCC_VERSION }}`
-            - **Commit:** `${{ needs.build.outputs.sultan_tag }}`
-            - **xxKSU Version:** `r${{ needs.build.outputs.ksu_ver }}`
-            - **SUSFS Version:** `${{ needs.build.outputs.susfs_ver }}`
-            - **Specs:** atp4pixel Master Spec (Pillars 1-4)
-          files: artifacts/*.zip
+          
+          gh release create "$TAG" artifacts/**/*.zip \
+            --title "Kernel Build — $TAG" \
+            --notes "
+            ### 🚀 Build Information
+            | Component | Details |
+            | :--- | :--- |
+            | **Kernel Base** | Sultan ($S_TAG) |
+            | **Manager** | [backslashxx/KernelSU](https://github.com/backslashxx/KernelSU) |
+            | **xxKSU Ver** | \`r$KSU_VER\` |
+            | **Compiler** | GCC 15.2.0 |
+            
+            ### 🛠️ Networking Features (Fortress)
+            - **TCP Congestion:** BBR (v1) + FQ
+            - **Routing:** Policy Routing (Table 1066) + IPSet (64k)
+            - **Fixes:** ADDRTYPE Match, Google VPN (XFRM), TTL 64 Share
+            
+            > Built for Pixel 7, 8, and 9 Series."
