@@ -41,7 +41,6 @@ jobs:
             defconfig: zuma_defconfig
           - codename: zumapro
             defconfig: zumapro_defconfig
-
     steps:
       - uses: actions/checkout@v4
 
@@ -244,3 +243,233 @@ jobs:
             variant_name: "KowSU-SUSFS"
             kernel_repo: "https://github.com/kerneltoast/android_kernel_google_tensynos"
             kernel_branch: "16.0.0-sultan"
+            ksu_repo: "https://github.com/KOWX712/KernelSU"
+            ksu_branch: "master"
+            defconfig: gs201_defconfig
+          - codename: zuma
+            variant_name: "KowSU-SUSFS"
+            kernel_repo: "https://github.com/kerneltoast/android_kernel_google_tensynos"
+            kernel_branch: "16.0.0-sultan"
+            ksu_repo: "https://github.com/KOWX712/KernelSU"
+            ksu_branch: "master"
+            defconfig: zuma_defconfig
+          - codename: zumapro
+            variant_name: "KowSU-SUSFS"
+            kernel_repo: "https://github.com/kerneltoast/android_kernel_google_tensynos"
+            kernel_branch: "16.0.0-sultan"
+            ksu_repo: "https://github.com/KOWX712/KernelSU"
+            ksu_branch: "master"
+            defconfig: zumapro_defconfig
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Toolchain
+        run: |
+          wget -q "${{ env.GCC_ARCHIVE_URL }}" -O gcc.tar.gz
+          tar -xf gcc.tar.gz
+          echo "GCC_PATH=$PWD/gcc-${{ env.GCC_VERSION }}-nolibc/aarch64-linux/bin/aarch64-linux-" >> "$GITHUB_ENV"
+
+      - name: Clone Components
+        run: |
+          git clone --depth=1 "${{ matrix.kernel_repo }}" -b "${{ matrix.kernel_branch }}" sultan
+          git clone --depth=1 "${{ matrix.ksu_repo }}" -b "${{ matrix.ksu_branch }}" KernelSU
+          git clone --depth=1 "${{ env.ANYKERNEL_REPO }}" -b "sultan-${{ matrix.codename }}" AK3
+          git clone --depth=1 "${{ env.PATCHES_REPO }}" kernel_patches
+          git clone --depth=1 "${{ env.SCRIPTS_REPO }}" sh
+          git clone --depth=1 "${{ env.SUSFS_REPO }}" -b "gki-android14-6.1" susfs4ksu
+
+      - name: Integration & Patching
+        run: |
+          cd sultan
+          patch -p1 < ../kernel_patches/sultan/60_scripts_mkcompile_h.patch || true
+          patch -p1 < ../kernel_patches/sultan/61_scripts_setlocalversion.patch || true
+          patch -p1 < ../kernel_patches/sultan/62_init_Makefile.patch || true
+
+          cd ../KernelSU
+          patch -p1 -l --fuzz=3 < ../kernel_patches/kowsu/10_enable_susfs_for_ksu.patch || true
+          cd ../sultan
+
+          cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch ./
+          cp -r ../susfs4ksu/kernel_patches/fs/* ./fs/
+          cp -r ../susfs4ksu/kernel_patches/include/linux/* ./include/linux/
+          patch -p1 --fuzz=10 < 50_add_susfs_in_gki-android14-6.1.patch || true
+          patch -p1 --fuzz=3 < ../kernel_patches/sultan/sys.c_fix.patch || true
+
+          ln -sf ../../KernelSU/kernel drivers/kernelsu
+          sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
+          echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
+
+      - name: Metadata Extraction
+        id: meta
+        run: |
+          S_TAG=$(git -C sultan tag --sort=-committerdate | head -n1)
+          chmod +x ./sh/get_ksuver.sh
+          KSU_ORG=$(echo "${{ matrix.ksu_repo }}" | cut -d'/' -f4)
+          K_VER=$(./sh/get_ksuver.sh "$KSU_ORG" "KernelSU" "${{ matrix.ksu_branch }}" || echo "unknown")
+          S_VER=$(grep -m1 'define SUSFS_VERSION' sultan/include/linux/susfs.h | grep -oP '".*?"' | tr -d '"' || echo "integrated")
+          echo "s_tag=$S_TAG" >> "$GITHUB_OUTPUT"
+          echo "ksu_ver=$K_VER" >> "$GITHUB_OUTPUT"
+          echo "susfs_ver=$S_VER" >> "$GITHUB_OUTPUT"
+
+      - name: Compilation
+        working-directory: sultan
+        run: |
+          export CROSS_COMPILE=${{ env.GCC_PATH }}
+          export CC=${{ env.GCC_PATH }}gcc
+          make O=out ${{ matrix.defconfig }}
+
+          DEFCONFIG="out/.config"
+
+          cat <<EOF >> "$DEFCONFIG"
+          # KernelSU Core (Source Integrated)
+          CONFIG_KSU=y
+          # CONFIG_KSU_KPROBES_HOOK is not set
+          # CONFIG_KSU_DEBUG is not set
+          # CONFIG_KSU_ALLOWLIST_WORKAROUND is not set
+
+          # atp4pixel Networking & System Pillars
+          CONFIG_NETFILTER_ADVANCED=y
+          CONFIG_IP_NF_TARGET_TTL=y
+          CONFIG_IP6_NF_TARGET_HL=y
+          CONFIG_IP6_NF_MATCH_HL=y
+          CONFIG_BPF_STREAM_PARSER=y
+          CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y
+          CONFIG_NETFILTER_XT_TARGET_TPROXY=y
+          CONFIG_NETFILTER_XT_TARGET_REDIRECT=y
+          CONFIG_NETFILTER_XT_MATCH_SOCKET=y
+          CONFIG_NETFILTER_XT_MATCH_MARK=y
+          CONFIG_NETFILTER_XT_MATCH_IPRANGE=y
+          CONFIG_NETFILTER_XT_MATCH_OWNER=y
+          CONFIG_NETFILTER_XT_MATCH_MAC=y
+          CONFIG_NETFILTER_XT_MATCH_CONNTRACK=y
+          CONFIG_NETFILTER_XT_MARK=y
+          CONFIG_NETFILTER_XT_CONNMARK=y
+          CONFIG_NETFILTER_XT_TARGET_CONNMARK=y
+          CONFIG_IP6_NF_NAT=y
+          CONFIG_IP6_NF_TARGET_REDIRECT=y
+          CONFIG_IP6_NF_TARGET_MASQUERADE=y
+          CONFIG_IP_MULTIPLE_TABLES=y
+          CONFIG_IPV6_MULTIPLE_TABLES=y
+          CONFIG_XFRM_ALGO=y
+          CONFIG_INET_IPCOMP=y
+          CONFIG_INET_XFRM_TUNNEL=y
+          CONFIG_INET_ESP=y
+          CONFIG_XFRM_USER=y
+          CONFIG_XFRM_SUB_POLICY=y
+          CONFIG_INET_XFRM_MODE_TUNNEL=y
+          CONFIG_XFRM_STATISTICS=y
+          CONFIG_IP_SET=y
+          CONFIG_NETFILTER_XT_SET=y
+          CONFIG_IP_SET_MAX=65534
+          CONFIG_IP_SET_BITMAP_IP=y
+          CONFIG_IP_SET_BITMAP_IPMAC=y
+          CONFIG_IP_SET_BITMAP_PORT=y
+          CONFIG_IP_SET_HASH_IP=y
+          CONFIG_IP_SET_HASH_IPMARK=y
+          CONFIG_IP_SET_HASH_IPPORT=y
+          CONFIG_IP_SET_HASH_IPPORTIP=y
+          CONFIG_IP_SET_HASH_IPPORTNET=y
+          CONFIG_IP_SET_HASH_IPMAC=y
+          CONFIG_IP_SET_HASH_MAC=y
+          CONFIG_IP_SET_HASH_NETPORTNET=y
+          CONFIG_IP_SET_HASH_NET=y
+          CONFIG_IP_SET_HASH_NETNET=y
+          CONFIG_IP_SET_HASH_NETPORT=y
+          CONFIG_IP_SET_HASH_NETIFACE=y
+          CONFIG_IP_SET_LIST_SET=y
+          CONFIG_TCP_CONG_ADVANCED=y
+          CONFIG_TCP_CONG_BBR=y
+          CONFIG_NET_SCH_FQ=y
+          CONFIG_DEFAULT_BBR=y
+          CONFIG_SECURITY_NETWORK=y
+          CONFIG_CGROUPS=y
+          CONFIG_CGROUP_BPF=y
+          CONFIG_CGROUP_SCHED=y
+          CONFIG_CGROUP_PIDS=y
+          CONFIG_CGROUP_FREEZER=y
+          CONFIG_INOTIFY_USER=y
+          CONFIG_TMPFS_POSIX_ACL=y
+          CONFIG_TMPFS_INODE64=y
+
+          # SUSFS Stealth Pillars
+          CONFIG_KSU_SUSFS=y
+          CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
+          CONFIG_KSU_SUSFS_SUS_PATH=y
+          CONFIG_KSU_SUSFS_SUS_MOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
+          CONFIG_KSU_SUSFS_SUS_KSTAT=y
+          CONFIG_KSU_SUSFS_SUS_OVERLAYFS=y
+          CONFIG_KSU_SUSFS_TRY_UMOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
+          CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+          CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+          CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+          CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+          EOF
+
+          sed -i 's/CONFIG_TCP_CONG_BIC=y/CONFIG_TCP_CONG_BIC=n/' "$DEFCONFIG"
+          sed -i 's/CONFIG_TCP_CONG_WESTWOOD=y/CONFIG_TCP_CONG_WESTWOOD=n/' "$DEFCONFIG"
+          sed -i 's/CONFIG_TCP_CONG_HTCP=y/CONFIG_TCP_CONG_HTCP=n/' "$DEFCONFIG"
+          sed -i '/CONFIG_KPROBES/d' "$DEFCONFIG"
+          echo "# CONFIG_KPROBES is not set" >> "$DEFCONFIG"
+          echo "CONFIG_WERROR=n" >> "$DEFCONFIG"
+
+          make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" olddefconfig
+          make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" -j"$(nproc --all)"
+
+      - name: Packaging
+        run: |
+          cp sultan/out/arch/arm64/boot/Image.lz4 AK3/Image.lz4 || cp sultan/out/arch/arm64/boot/Image AK3/Image
+          if [ -d "sultan/out/google-devices/${{ matrix.codename }}/dts" ]; then
+            cat sultan/out/google-devices/${{ matrix.codename }}/dts/*.dtb > AK3/dtb
+          else
+            cat sultan/out/arch/arm64/boot/dts/google/*.dtb > AK3/dtb
+          fi
+          STAG="${{ steps.meta.outputs.s_tag }}"
+          KVER="${{ steps.meta.outputs.ksu_ver }}"
+          SVER="${{ steps.meta.outputs.susfs_ver }}"
+          ZIP_NAME="Sultan-${{ matrix.codename }}-${STAG}-KowSU-SUSFS-r${KVER}-SUSFS-${SVER}.zip"
+          cd AK3 && zip -r9 "../${ZIP_NAME}" . -x "*.git*"
+          echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_ENV"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: KowSU-SUSFS-${{ matrix.codename }}
+          path: ${{ env.ZIP_NAME }}
+          retention-days: 1
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [build-xxksu, build-kowsu]
+    steps:
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: zips
+          merge-multiple: true
+
+      - name: Publish Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          DATE_STR=$(date +"%y%m%d")
+          COUNT=$(gh api repos/${GH_REPO}/tags --jq '.[].name' | grep "$DATE_STR" | wc -l || echo "0")
+          TAG="${DATE_STR}-r$((COUNT + 1))"
+          cat <<EOF > body.md
+          ### 🚀 Sultan Kernel — Multi-Variant Build
+          | Variant | KSU Fork | SUSFS |
+          | :--- | :--- | :--- |
+          | xxKSU-SUSFS | [Trijal08/KernelSU](https://github.com/Trijal08/KernelSU) | Baked-in |
+          | xxKSU | [backslashxx/KernelSU](https://github.com/backslashxx/KernelSU) | — |
+          | KowSU-SUSFS | [KOWX712/KernelSU](https://github.com/KOWX712/KernelSU) | [simonpunk/susfs4ksu](https://gitlab.com/simonpunk/susfs4ksu) |
+
+          **Compiler:** GCC ${{ env.GCC_VERSION }}
+          **Devices:** gs201 (Pixel 7/7Pro) · zuma (Pixel 8/8Pro) · zumapro (Pixel 9/9Pro/9ProXL)
+          EOF
+          gh release create "$TAG" zips/*.zip \
+            --title "Sultan Kernel — $TAG" \
+            --notes-file body.md
