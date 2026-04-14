@@ -21,7 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # --- GS201 (Pixel 7 Series) ---
+          # --- GS201 (Pixel 7 / 7 Pro) ---
           - codename: gs201
             variant_name: "xxKSU-SUSFS"
             kernel_repo: "https://github.com/Trijal08/anaconda_kernel_google_tensynos"
@@ -136,7 +136,7 @@ jobs:
             cp -r ../susfs4ksu/kernel_patches/fs/* ./fs/
             cp -r ../susfs4ksu/kernel_patches/include/linux/* ./include/linux/
             
-            # As requested: || true for 50 patch, then sys.c_fix to resolve conflicts
+            # Sequence: 50 patch || true, then sys.c_fix to clean up
             patch -p1 --fuzz=10 < 50_add_susfs_in_gki-android14-6.1.patch || true
             patch -p1 --fuzz=3 < ../kernel_patches/sultan/sys.c_fix.patch || true
           fi
@@ -174,9 +174,14 @@ jobs:
           
           DEFCONFIG="out/.config"
 
-          # --- POWER CONFIG ---
           cat <<EOF >> "$DEFCONFIG"
+          # KernelSU Core (Source Integrated)
           CONFIG_KSU=y
+          # CONFIG_KSU_KPROBES_HOOK is not set
+          # CONFIG_KSU_DEBUG is not set
+          # CONFIG_KSU_ALLOWLIST_WORKAROUND is not set
+
+          # atp4pixel Networking & System Pillars
           CONFIG_NETFILTER_ADVANCED=y
           CONFIG_IP_NF_TARGET_TTL=y
           CONFIG_IP6_NF_TARGET_HL=y
@@ -241,9 +246,9 @@ jobs:
           CONFIG_TMPFS_INODE64=y
           EOF
 
-          # --- SUSFS PILLARS ---
           if [[ "${{ matrix.use_susfs }}" == "true" ]]; then
             cat <<EOF >> "$DEFCONFIG"
+          # SUSFS Stealth Pillars
           CONFIG_KSU_SUSFS=y
           CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
           CONFIG_KSU_SUSFS_SUS_PATH=y
@@ -261,16 +266,15 @@ jobs:
           EOF
           fi
 
-          # --- xxKSU HOOKLESS FLAGS ---
           if [[ "${{ matrix.variant_name }}" == *"xxKSU"* ]]; then
             cat <<EOF >> "$DEFCONFIG"
+          # xxKSU Hookless Pillars
           CONFIG_KSU_TAMPER_SYSCALL_TABLE=y
           CONFIG_KSU_LSM_SECURITY_HOOKS=y
           CONFIG_KSU_THRONE_TRACKER_ALWAYS_THREADED=y
           EOF
           fi
 
-          # --- GUARDRAILS ---
           sed -i 's/CONFIG_TCP_CONG_BIC=y/CONFIG_TCP_CONG_BIC=n/' "$DEFCONFIG"
           sed -i 's/CONFIG_TCP_CONG_WESTWOOD=y/CONFIG_TCP_CONG_WESTWOOD=n/' "$DEFCONFIG"
           sed -i 's/CONFIG_TCP_CONG_HTCP=y/CONFIG_TCP_CONG_HTCP=n/' "$DEFCONFIG"
