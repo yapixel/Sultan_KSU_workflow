@@ -17,6 +17,8 @@ jobs:
   build-xxksu:
     name: ${{ matrix.variant_name }} (${{ matrix.codename }})
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -42,12 +44,30 @@ jobs:
           - codename: zumapro
             defconfig: zumapro_defconfig
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libelf-dev libssl-dev bc bison flex \
+            python3 zip
+
+      - name: Cache GCC Toolchain
+        id: gcc-cache
+        uses: actions/cache@v4
+        with:
+          path: gcc-${{ env.GCC_VERSION }}-nolibc
+          key: gcc-${{ env.GCC_VERSION }}
 
       - name: Setup Toolchain
+        if: steps.gcc-cache.outputs.cache-hit != 'true'
         run: |
           wget -q "${{ env.GCC_ARCHIVE_URL }}" -O gcc.tar.gz
           tar -xf gcc.tar.gz
+
+      - name: Export GCC Path
+        run: |
           echo "GCC_PATH=$PWD/gcc-${{ env.GCC_VERSION }}-nolibc/aarch64-linux/bin/aarch64-linux-" >> "$GITHUB_ENV"
 
       - name: Clone Components
@@ -235,6 +255,8 @@ jobs:
   build-kowsu:
     name: ${{ matrix.variant_name }} (${{ matrix.codename }})
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -261,12 +283,30 @@ jobs:
             ksu_branch: "master"
             defconfig: zumapro_defconfig
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libelf-dev libssl-dev bc bison flex \
+            python3 zip
+
+      - name: Cache GCC Toolchain
+        id: gcc-cache
+        uses: actions/cache@v4
+        with:
+          path: gcc-${{ env.GCC_VERSION }}-nolibc
+          key: gcc-${{ env.GCC_VERSION }}
 
       - name: Setup Toolchain
+        if: steps.gcc-cache.outputs.cache-hit != 'true'
         run: |
           wget -q "${{ env.GCC_ARCHIVE_URL }}" -O gcc.tar.gz
           tar -xf gcc.tar.gz
+
+      - name: Export GCC Path
+        run: |
           echo "GCC_PATH=$PWD/gcc-${{ env.GCC_VERSION }}-nolibc/aarch64-linux/bin/aarch64-linux-" >> "$GITHUB_ENV"
 
       - name: Clone Components
@@ -444,6 +484,8 @@ jobs:
     name: Create Release
     runs-on: ubuntu-latest
     needs: [build-xxksu, build-kowsu]
+    permissions:
+      contents: write
     steps:
       - name: Download All Artifacts
         uses: actions/download-artifact@v4
@@ -451,14 +493,21 @@ jobs:
           path: zips
           merge-multiple: true
 
+      - name: Verify Artifact Count
+        run: |
+          COUNT=$(ls zips/*.zip 2>/dev/null | wc -l)
+          if [[ "$COUNT" -lt 9 ]]; then
+            echo "::error::Expected 9 zips, got $COUNT — aborting release"
+            exit 1
+          fi
+
       - name: Publish Release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           DATE_STR=$(date +"%y%m%d")
-          COUNT=$(gh api repos/${GH_REPO}/tags --jq '.[].name' | grep "$DATE_STR" | wc -l || echo "0")
-          TAG="${DATE_STR}-r$((COUNT + 1))"
+          TAG="${DATE_STR}-r${{ github.run_number }}"
           cat <<EOF > body.md
           ### 🚀 Sultan Kernel — Multi-Variant Build
           | Variant | KSU Fork | SUSFS |
