@@ -47,7 +47,7 @@ jobs:
             use_susfs: false
             defconfig: gs201_defconfig
 
-          # --- SHUSKY (Pixel 8 / 8 Pro) ---
+          # --- zuma (Pixel 8 / 8 Pro) ---
           - codename: shusky
             variant_name: "xxKSU-SUSFS"
             kernel_repo: "https://github.com/Trijal08/anaconda_kernel_google_tensynos"
@@ -55,16 +55,16 @@ jobs:
             ksu_repo: "https://github.com/Trijal08/KernelSU"
             ksu_branch: "master-susfs"
             use_susfs: true
-            defconfig: shusky_defconfig
-          - codename: shusky
+            defconfig: zuma_defconfig
+          - codename: zuma
             variant_name: "KowSU-SUSFS"
             kernel_repo: "https://github.com/kerneltoast/android_kernel_google_tensynos"
             kernel_branch: "16.0.0-sultan"
             ksu_repo: "https://github.com/KOWX712/KernelSU"
             ksu_branch: "master"
             use_susfs: true
-            defconfig: shusky_defconfig
-          - codename: shusky
+            defconfig: zuma_defconfig
+          - codename: zuma
             variant_name: "xxKSU"
             kernel_repo: "https://github.com/kerneltoast/android_kernel_google_tensynos"
             kernel_branch: "16.0.0-sultan"
@@ -73,31 +73,31 @@ jobs:
             use_susfs: false
             defconfig: shusky_defconfig
 
-          # --- CAIMITO (Pixel 9 / 9P / 9PXL) ---
-          - codename: caimito
+          # --- zumapro (Pixel 9 / 9P / 9PXL) ---
+          - codename: zumapro
             variant_name: "xxKSU-SUSFS"
             kernel_repo: "https://github.com/Trijal08/anaconda_kernel_google_tensynos"
             kernel_branch: "anaconda-tensynos-qpr3"
             ksu_repo: "https://github.com/Trijal08/KernelSU"
             ksu_branch: "master-susfs"
             use_susfs: true
-            defconfig: caimito_defconfig
-          - codename: caimito
+            defconfig: zumapro_defconfig
+          - codename: zumapro
             variant_name: "KowSU-SUSFS"
             kernel_repo: "https://github.com/kerneltoast/android_kernel_google_tensynos"
             kernel_branch: "16.0.0-sultan"
             ksu_repo: "https://github.com/KOWX712/KernelSU"
             ksu_branch: "master"
             use_susfs: true
-            defconfig: caimito_defconfig
-          - codename: caimito
+            defconfig: zumapro_defconfig
+          - codename: zumapro
             variant_name: "xxKSU"
             kernel_repo: "https://github.com/kerneltoast/android_kernel_google_tensynos"
             kernel_branch: "16.0.0-sultan"
             ksu_repo: "https://github.com/backslashxx/KernelSU"
             ksu_branch: "master"
             use_susfs: false
-            defconfig: caimito_defconfig
+            defconfig: zumapro_defconfig
 
     steps:
       - uses: actions/checkout@v6
