@@ -32,9 +32,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Install Build Dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends libelf-dev libssl-dev bc bison flex python3 zip
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libelf-dev libssl-dev bc bison flex python3 zip
 
       - name: Cache GCC Toolchain
         id: gcc-cache
@@ -45,9 +43,7 @@ jobs:
 
       - name: Setup Toolchain
         if: steps.gcc-cache.outputs.cache-hit != 'true'
-        run: |
-          wget -q "${{ env.GCC_ARCHIVE_URL }}" -O gcc.tar.gz
-          tar -xf gcc.tar.gz
+        run: wget -q "${{ env.GCC_ARCHIVE_URL }}" -O gcc.tar.gz && tar -xf gcc.tar.gz
 
       - name: Export Path
         run: echo "GCC_PATH=$PWD/gcc-${{ env.GCC_VERSION }}-nolibc/aarch64-linux/bin/aarch64-linux-" >> "$GITHUB_ENV"
@@ -73,7 +69,7 @@ jobs:
       - name: Metadata Extraction
         id: meta
         run: |
-          S_TAG=$(git -C sultan rev-parse --short HEAD)
+          S_TAG=$(git -C sultan rev-parse --short HEAD || echo "unknown")
           chmod +x ./sh/get_ksuver.sh
           K_VER=$(./sh/get_ksuver.sh "backslashxx" "KernelSU" "master" || echo "unknown")
           echo "s_tag=$S_TAG" >> "$GITHUB_OUTPUT"
@@ -89,4 +85,244 @@ jobs:
       - name: Config Injection
         uses: ./.github/actions/kernel-config
         with:
-          defconfig_
+          defconfig_path: "sultan/out/.config"
+          include_susfs: "false"
+          is_xxksu: "true"
+
+      - name: Build Execution
+        working-directory: sultan
+        run: |
+          export CROSS_COMPILE=${{ env.GCC_PATH }}
+          export CC=${{ env.GCC_PATH }}gcc
+          make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" olddefconfig
+          make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" -j"$(nproc --all)"
+
+      - name: Package Artifact
+        run: |
+          cp sultan/out/arch/arm64/boot/Image.lz4 AK3/Image.lz4 || cp sultan/out/arch/arm64/boot/Image AK3/Image
+          if [ -d "sultan/out/google-devices/${{ matrix.codename }}/dts" ]; then
+            cat sultan/out/google-devices/${{ matrix.codename }}/dts/*.dtb > AK3/dtb
+          else
+            cat sultan/out/arch/arm64/boot/dts/google/*.dtb > AK3/dtb
+          fi
+          ZIP_NAME="Sultan-${{ matrix.codename }}-${{ steps.meta.outputs.s_tag }}-xxKSU-r${{ steps.meta.outputs.ksu_ver }}.zip"
+          cd AK3 && zip -r9 "../${ZIP_NAME}" . -x "*.git*"
+          echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_ENV"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: xxKSU-${{ matrix.codename }}
+          path: ${{ env.ZIP_NAME }}
+
+  build-xxksu-susfs:
+    name: xxKSU-SUSFS (${{ matrix.codename }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        codename: [gs201, zuma, zumapro]
+        include:
+          - codename: gs201
+            defconfig: gs201_defconfig
+          - codename: zuma
+            defconfig: zuma_defconfig
+          - codename: zumapro
+            defconfig: zumapro_defconfig
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Build Dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libelf-dev libssl-dev bc bison flex python3 zip
+
+      - name: Cache GCC Toolchain
+        id: gcc-cache
+        uses: actions/cache@v5
+        with:
+          path: gcc-${{ env.GCC_VERSION }}-nolibc
+          key: gcc-${{ env.GCC_VERSION }}
+
+      - name: Setup Toolchain
+        if: steps.gcc-cache.outputs.cache-hit != 'true'
+        run: wget -q "${{ env.GCC_ARCHIVE_URL }}" -O gcc.tar.gz && tar -xf gcc.tar.gz
+
+      - name: Export Path
+        run: echo "GCC_PATH=$PWD/gcc-${{ env.GCC_VERSION }}-nolibc/aarch64-linux/bin/aarch64-linux-" >> "$GITHUB_ENV"
+
+      - name: Clone Components
+        run: |
+          git clone --depth=1 "https://github.com/Trijal08/anaconda_kernel_google_tensynos" -b "anaconda-tensynos-qpr3" sultan
+          git -C sultan submodule update --init --recursive --depth=1
+          git clone --depth=1 "https://github.com/Trijal08/KernelSU" -b "master-susfs" KernelSU
+          git clone --depth=1 "${{ env.ANYKERNEL_REPO }}" -b "sultan-${{ matrix.codename }}" AK3
+          git clone --depth=1 "${{ env.PATCHES_REPO }}" kernel_patches
+          git clone --depth=1 "${{ env.SCRIPTS_REPO }}" sh
+
+      - name: Kernel Integration
+        run: |
+          cd sultan
+          patch -p1 < ../kernel_patches/sultan/60_scripts_mkcompile_h.patch || true
+          patch -p1 < ../kernel_patches/sultan/61_scripts_setlocalversion.patch || true
+          patch -p1 < ../kernel_patches/sultan/62_init_Makefile.patch || true
+          ln -sf ../../KernelSU/kernel drivers/kernelsu
+          sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
+          echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
+
+      - name: Metadata Extraction
+        id: meta
+        run: |
+          S_TAG=$(git -C sultan rev-parse --short HEAD || echo "unknown")
+          chmod +x ./sh/get_ksuver.sh
+          K_VER=$(./sh/get_ksuver.sh "Trijal08" "KernelSU" "master-susfs" || echo "unknown")
+          echo "s_tag=$S_TAG" >> "$GITHUB_OUTPUT"
+          echo "ksu_ver=$K_VER" >> "$GITHUB_OUTPUT"
+
+      - name: Compilation Step
+        working-directory: sultan
+        run: |
+          export CROSS_COMPILE=${{ env.GCC_PATH }}
+          export CC=${{ env.GCC_PATH }}gcc
+          make O=out ${{ matrix.defconfig }}
+
+      - name: Config Injection
+        uses: ./.github/actions/kernel-config
+        with:
+          defconfig_path: "sultan/out/.config"
+          include_susfs: "true"
+          is_xxksu: "true"
+
+      - name: Build Execution
+        working-directory: sultan
+        run: |
+          export CROSS_COMPILE=${{ env.GCC_PATH }}
+          export CC=${{ env.GCC_PATH }}gcc
+          make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" olddefconfig
+          make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" -j"$(nproc --all)"
+
+      - name: Package Artifact
+        run: |
+          cp sultan/out/arch/arm64/boot/Image.lz4 AK3/Image.lz4 || cp sultan/out/arch/arm64/boot/Image AK3/Image
+          if [ -d "sultan/out/google-devices/${{ matrix.codename }}/dts" ]; then
+            cat sultan/out/google-devices/${{ matrix.codename }}/dts/*.dtb > AK3/dtb
+          else
+            cat sultan/out/arch/arm64/boot/dts/google/*.dtb > AK3/dtb
+          fi
+          ZIP_NAME="Sultan-${{ matrix.codename }}-${{ steps.meta.outputs.s_tag }}-xxKSU-SUSFS-r${{ steps.meta.outputs.ksu_ver }}.zip"
+          cd AK3 && zip -r9 "../${ZIP_NAME}" . -x "*.git*"
+          echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_ENV"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: xxKSU-SUSFS-${{ matrix.codename }}
+          path: ${{ env.ZIP_NAME }}
+
+  build-kowsu:
+    name: KowSU-SUSFS (${{ matrix.codename }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        codename: [gs201, zuma, zumapro]
+        include:
+          - codename: gs201
+            defconfig: gs201_defconfig
+          - codename: zuma
+            defconfig: zuma_defconfig
+          - codename: zumapro
+            defconfig: zumapro_defconfig
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Build Dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends libelf-dev libssl-dev bc bison flex python3 zip
+
+      - name: Cache GCC Toolchain
+        id: gcc-cache
+        uses: actions/cache@v5
+        with:
+          path: gcc-${{ env.GCC_VERSION }}-nolibc
+          key: gcc-${{ env.GCC_VERSION }}
+
+      - name: Setup Toolchain
+        if: steps.gcc-cache.outputs.cache-hit != 'true'
+        run: wget -q "${{ env.GCC_ARCHIVE_URL }}" -O gcc.tar.gz && tar -xf gcc.tar.gz
+
+      - name: Export Path
+        run: echo "GCC_PATH=$PWD/gcc-${{ env.GCC_VERSION }}-nolibc/aarch64-linux/bin/aarch64-linux-" >> "$GITHUB_ENV"
+
+      - name: Clone Components
+        run: |
+          git clone --depth=1 "https://github.com/kerneltoast/android_kernel_google_tensynos" -b "16.0.0-sultan" sultan
+          git clone --depth=1 "https://github.com/KOWX712/KernelSU" -b "master" KernelSU
+          git clone --depth=1 "${{ env.ANYKERNEL_REPO }}" -b "sultan-${{ matrix.codename }}" AK3
+          git clone --depth=1 "${{ env.PATCHES_REPO }}" kernel_patches
+          git clone --depth=1 "${{ env.SCRIPTS_REPO }}" sh
+          git clone --depth=1 "${{ env.SUSFS_REPO }}" -b "gki-android14-6.1" susfs4ksu
+
+      - name: Patching and Integration
+        run: |
+          cd sultan
+          patch -p1 < ../kernel_patches/sultan/60_scripts_mkcompile_h.patch || true
+          patch -p1 < ../kernel_patches/sultan/61_scripts_setlocalversion.patch || true
+          patch -p1 < ../kernel_patches/sultan/62_init_Makefile.patch || true
+          cd ../KernelSU
+          patch -p1 -l --fuzz=3 < ../kernel_patches/kowsu/10_enable_susfs_for_ksu.patch || true
+          cd ../sultan
+          cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch ./
+          cp -r ../susfs4ksu/kernel_patches/fs/* ./fs/
+          cp -r ../susfs4ksu/kernel_patches/include/linux/* ./include/linux/
+          patch -p1 --fuzz=10 < 50_add_susfs_in_gki-android14-6.1.patch || true
+          patch -p1 --fuzz=3 < ../kernel_patches/sultan/sys.c_fix.patch || true
+          ln -sf ../../KernelSU/kernel drivers/kernelsu
+          sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
+          echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
+
+      - name: Metadata Extraction
+        id: meta
+        run: |
+          S_TAG=$(git -C sultan rev-parse --short HEAD || echo "unknown")
+          chmod +x ./sh/get_ksuver.sh
+          K_VER=$(./sh/get_ksuver.sh "KOWX712" "KernelSU" "master" || echo "unknown")
+          echo "s_tag=$S_TAG" >> "$GITHUB_OUTPUT"
+          echo "ksu_ver=$K_VER" >> "$GITHUB_OUTPUT"
+
+      - name: Compilation Step
+        working-directory: sultan
+        run: |
+          export CROSS_COMPILE=${{ env.GCC_PATH }}
+          export CC=${{ env.GCC_PATH }}gcc
+          make O=out ${{ matrix.defconfig }}
+
+      - name: Config Injection
+        uses: ./.github/actions/kernel-config
+        with:
+          defconfig_path: "sultan/out/.config"
+          include_susfs: "true"
+          is_xxksu: "false"
+
+      - name: Build Execution
+        working-directory: sultan
+        run: |
+          export CROSS_COMPILE=${{ env.GCC_PATH }}
+          export CC=${{ env.GCC_PATH }}gcc
+          make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" olddefconfig
+          make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" -j"$(nproc --all)"
+
+      - name: Package Artifact
+        run: |
+          cp sultan/out/arch/arm64/boot/Image.lz4 AK3/Image.lz4 || cp sultan/out/arch/arm64/boot/Image AK3/Image
+          if [ -d "sultan/out/google-devices/${{ matrix.codename }}/dts" ]; then
+            cat sultan/out/google-devices/${{ matrix.codename }}/dts/*.dtb > AK3/dtb
+          else
+            cat sultan/out/arch/arm64/boot/dts/google/*.dtb > AK3/dtb
+          fi
+          ZIP_NAME="Sultan-${{ matrix.codename }}-${{ steps.meta.outputs.s_tag }}-KowSU-SUSFS-r${{ steps.meta.outputs.ksu_ver }}.zip"
+          cd AK3 && zip -r9 "../${ZIP_NAME}" . -x "*.git*"
+          echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_ENV"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: KowSU-SUSFS-${{ matrix.codename }}
+          path: ${{ env.ZIP_NAME }}
