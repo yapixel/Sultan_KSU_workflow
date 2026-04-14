@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 env:
-  ANYKERNEL_REPO: https://github.com/TheWildJames/AnyKernel3.git
+  ANYKERNEL_REPO: https://github.com/WildKernels/AnyKernel3.git
   PATCHES_REPO: https://github.com/yapixel/kernel_patches
   SCRIPTS_REPO: https://github.com/TheSillyOk/sh
   SUSFS_REPO: https://gitlab.com/simonpunk/susfs4ksu
@@ -47,8 +47,8 @@ jobs:
             use_susfs: false
             defconfig: gs201_defconfig
 
-          # --- zuma (Pixel 8 / 8 Pro) ---
-          - codename: shusky
+          # --- ZUMA (Pixel 8 / 8 Pro) ---
+          - codename: zuma
             variant_name: "xxKSU-SUSFS"
             kernel_repo: "https://github.com/Trijal08/anaconda_kernel_google_tensynos"
             kernel_branch: "anaconda-tensynos-qpr3"
@@ -71,9 +71,9 @@ jobs:
             ksu_repo: "https://github.com/backslashxx/KernelSU"
             ksu_branch: "master"
             use_susfs: false
-            defconfig: shusky_defconfig
+            defconfig: zuma_defconfig
 
-          # --- zumapro (Pixel 9 / 9P / 9PXL) ---
+          # --- ZUMAPRO (Pixel 9 / 9P / 9PXL) ---
           - codename: zumapro
             variant_name: "xxKSU-SUSFS"
             kernel_repo: "https://github.com/Trijal08/anaconda_kernel_google_tensynos"
@@ -115,7 +115,7 @@ jobs:
           git clone --depth=1 "${{ env.ANYKERNEL_REPO }}" -b "sultan-${{ matrix.codename }}" AK3
           git clone --depth=1 "${{ env.PATCHES_REPO }}" kernel_patches
           git clone --depth=1 "${{ env.SCRIPTS_REPO }}" sh
-          if [ "${{ matrix.use_susfs }}" = "true" ]; then
+          if [[ "${{ matrix.use_susfs }}" == "true" && "${{ matrix.variant_name }}" == *"KowSU"* ]]; then
             git clone --depth=1 "${{ env.SUSFS_REPO }}" -b "gki-android14-6.1" susfs4ksu
           fi
 
@@ -125,18 +125,16 @@ jobs:
           patch -p1 < ../kernel_patches/sultan/60_scripts_mkcompile_h.patch || true
           patch -p1 < ../kernel_patches/sultan/61_scripts_setlocalversion.patch || true
           patch -p1 < ../kernel_patches/sultan/62_init_Makefile.patch || true
-          
-          if [[ "${{ matrix.use_susfs }}" == "true" ]]; then
-            if [[ "${{ matrix.variant_name }}" == *"KowSU"* ]]; then
-               cd ../KernelSU
-               patch -p1 -l --fuzz=3 < ../kernel_patches/kowsu/10_enable_susfs_for_ksu.patch || true
-               cd ../sultan
-            fi
+
+          if [[ "${{ matrix.use_susfs }}" == "true" && "${{ matrix.variant_name }}" == *"KowSU"* ]]; then
+            cd ../KernelSU
+            patch -p1 -l --fuzz=3 < ../kernel_patches/kowsu/10_enable_susfs_for_ksu.patch || true
+            cd ../sultan
+
             cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch ./
             cp -r ../susfs4ksu/kernel_patches/fs/* ./fs/
             cp -r ../susfs4ksu/kernel_patches/include/linux/* ./include/linux/
-            
-            # Sequence: 50 patch || true, then sys.c_fix to clean up
+
             patch -p1 --fuzz=10 < 50_add_susfs_in_gki-android14-6.1.patch || true
             patch -p1 --fuzz=3 < ../kernel_patches/sultan/sys.c_fix.patch || true
           fi
@@ -171,7 +169,7 @@ jobs:
           export CROSS_COMPILE=${{ env.GCC_PATH }}
           export CC=${{ env.GCC_PATH }}gcc
           make O=out ${{ matrix.defconfig }}
-          
+
           DEFCONFIG="out/.config"
 
           cat <<EOF >> "$DEFCONFIG"
@@ -278,7 +276,6 @@ jobs:
           sed -i 's/CONFIG_TCP_CONG_BIC=y/CONFIG_TCP_CONG_BIC=n/' "$DEFCONFIG"
           sed -i 's/CONFIG_TCP_CONG_WESTWOOD=y/CONFIG_TCP_CONG_WESTWOOD=n/' "$DEFCONFIG"
           sed -i 's/CONFIG_TCP_CONG_HTCP=y/CONFIG_TCP_CONG_HTCP=n/' "$DEFCONFIG"
-          sed -i 's/CONFIG_KPROBES=y/# CONFIG_KPROBES is not set/' "$DEFCONFIG"
           sed -i '/CONFIG_KPROBES/d' "$DEFCONFIG"
           echo "# CONFIG_KPROBES is not set" >> "$DEFCONFIG"
           echo "CONFIG_WERROR=n" >> "$DEFCONFIG"
