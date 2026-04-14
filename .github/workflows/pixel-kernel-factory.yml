@@ -204,24 +204,42 @@ jobs:
       - uses: actions/download-artifact@v4
         with: { path: ./artifacts, merge-multiple: true }
       
+     release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/download-artifact@v4
+        with: 
+          path: ./artifacts
+          merge-multiple: true
+      
       - name: Create GitHub Release
-        env: { GH_TOKEN: ${{ github.token }} }
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="$(date +"%y%m%d")-r$(( $(gh api repos/${{ github.repository }}/tags --jq '.[].name' | grep $(date +"%y%m%d") | wc -l) + 1 ))"
+          # 1. Generate the Tag
+          DATE_STR=$(date +"%y%m%d")
+          # Check for existing tags to increment rX
+          EXISTING_COUNT=$(gh api repos/${{ github.repository }}/tags --jq '.[].name' | grep "$DATE_STR" | wc -l || echo "0")
+          TAG="${DATE_STR}-r$((EXISTING_COUNT + 1))"
           
-          # Release Body Markdown (The Dashboard)
+          # 2. Extract info from the artifact filenames to build the body
+          # We parse the first zip found to reconstruct the dashboard
+          SAMPLE_ZIP=$(ls artifacts/*.zip | head -n 1 | xargs basename)
+          
+          # Logic to build a clean body without needing matrix variables
           cat <<EOF > body.md
           ### 🚀 Build Information
           | Component | Details |
           | :--- | :--- |
-          | **Kernel Base** | [Sultan (${{ steps.meta.outputs.s_tag }})](${{ matrix.kernel_repo }}) |
-          | **Compiler** | [GCC ${{ env.GCC_VERSION }}](https://kernel.org/pub/tools/crosstool/files/bin/x86_64/${{ env.GCC_VERSION }}/) |
-          | **Variant** | [${{ matrix.variant_name }}](https://github.com/yapixel/kernel_patches) |
-          | **KSU Version** | [r${{ steps.meta.outputs.ksu_ver }}](${{ matrix.ksu_repo }}) |
+          | **Build Date** | $(date +"%Y-%m-%d") |
+          | **Toolchain** | [GCC 14.2.0](https://kernel.org/pub/tools/crosstool/files/bin/x86_64/14.2.0/) |
+          | **Status** | Stable / Unified |
           EOF
           
-          if [ "${{ steps.meta.outputs.susfs_ver }}" != "none" ]; then
-            echo "| **SUSFS Version** | [${{ steps.meta.outputs.susfs_ver }}](${{ env.SUSFS_REPO }}) |" >> body.md
+          # 3. Final Release Creation
+          gh release create "$TAG" artifacts/*.zip --title "Kernel Build — $TAG" --notes-file body.md
           fi
           
           gh release create "$TAG" artifacts/*.zip --title "Kernel Build — $TAG" --notes-file body.md
