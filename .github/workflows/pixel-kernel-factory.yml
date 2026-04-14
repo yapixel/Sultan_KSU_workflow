@@ -95,7 +95,10 @@ jobs:
       - name: Metadata Extraction
         id: meta
         run: |
-          S_TAG=$(git -C sultan rev-parse --short HEAD)
+          S_TAG=$(git -C sultan tag --sort=-committerdate | head -n1)
+          if [[ -z "$S_TAG" ]]; then
+            S_TAG=$(git -C sultan rev-parse --short HEAD)
+          fi
           chmod +x ./sh/get_ksuver.sh
           KSU_ORG=$(echo "${{ matrix.ksu_repo }}" | cut -d'/' -f4)
           K_VER=$(./sh/get_ksuver.sh "$KSU_ORG" "KernelSU" "${{ matrix.ksu_branch }}" || echo "unknown")
@@ -107,9 +110,11 @@ jobs:
           echo "s_tag=$S_TAG" >> "$GITHUB_OUTPUT"
           echo "ksu_ver=$K_VER" >> "$GITHUB_OUTPUT"
           echo "susfs_ver=$S_VER" >> "$GITHUB_OUTPUT"
-
       - name: Compilation
         working-directory: sultan
+        env:
+          KBUILD_BUILD_USER: build-user
+          KBUILD_BUILD_HOST: build-host
         run: |
           export CROSS_COMPILE=${{ env.GCC_PATH }}
           export CC=${{ env.GCC_PATH }}gcc
