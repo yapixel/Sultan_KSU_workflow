@@ -15,41 +15,89 @@ env:
 
 jobs:
   build:
-    name: Build ${{ matrix.codename }} (${{ matrix.variant_name }})
+    name: ${{ matrix.variant_name }} (${{ matrix.codename }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          - codename: zuma
+          # --- GS201 (Pixel 7 / 7 Pro) ---
+          - codename: gs201
             variant_name: "xxKSU-SUSFS"
             kernel_repo: "https://github.com/Trijal08/anaconda_kernel_google_tensynos"
             kernel_branch: "anaconda-tensynos-qpr3"
             ksu_repo: "https://github.com/Trijal08/KernelSU"
             ksu_branch: "master-susfs"
             use_susfs: true
-            dtb_path: "google-devices/zuma/dts"
-            defconfig: zuma_defconfig
-
-          - codename: zuma
+            defconfig: gs201_defconfig
+          - codename: gs201
             variant_name: "KowSU-SUSFS"
             kernel_repo: "https://github.com/kerneltoast/android_kernel_google_tensynos"
             kernel_branch: "16.0.0-sultan"
             ksu_repo: "https://github.com/KOWX712/KernelSU"
             ksu_branch: "master"
             use_susfs: true
-            dtb_path: "google-devices/zuma/dts"
-            defconfig: zuma_defconfig
-
-          - codename: zuma
+            defconfig: gs201_defconfig
+          - codename: gs201
             variant_name: "xxKSU"
             kernel_repo: "https://github.com/kerneltoast/android_kernel_google_tensynos"
             kernel_branch: "16.0.0-sultan"
             ksu_repo: "https://github.com/backslashxx/KernelSU"
             ksu_branch: "master"
             use_susfs: false
-            dtb_path: "google-devices/zuma/dts"
-            defconfig: zuma_defconfig
+            defconfig: gs201_defconfig
+
+          # --- SHUSKY (Pixel 8 / 8 Pro) ---
+          - codename: shusky
+            variant_name: "xxKSU-SUSFS"
+            kernel_repo: "https://github.com/Trijal08/anaconda_kernel_google_tensynos"
+            kernel_branch: "anaconda-tensynos-qpr3"
+            ksu_repo: "https://github.com/Trijal08/KernelSU"
+            ksu_branch: "master-susfs"
+            use_susfs: true
+            defconfig: shusky_defconfig
+          - codename: shusky
+            variant_name: "KowSU-SUSFS"
+            kernel_repo: "https://github.com/kerneltoast/android_kernel_google_tensynos"
+            kernel_branch: "16.0.0-sultan"
+            ksu_repo: "https://github.com/KOWX712/KernelSU"
+            ksu_branch: "master"
+            use_susfs: true
+            defconfig: shusky_defconfig
+          - codename: shusky
+            variant_name: "xxKSU"
+            kernel_repo: "https://github.com/kerneltoast/android_kernel_google_tensynos"
+            kernel_branch: "16.0.0-sultan"
+            ksu_repo: "https://github.com/backslashxx/KernelSU"
+            ksu_branch: "master"
+            use_susfs: false
+            defconfig: shusky_defconfig
+
+          # --- CAIMITO (Pixel 9 Series) ---
+          - codename: caimito
+            variant_name: "xxKSU-SUSFS"
+            kernel_repo: "https://github.com/Trijal08/anaconda_kernel_google_tensynos"
+            kernel_branch: "anaconda-tensynos-qpr3"
+            ksu_repo: "https://github.com/Trijal08/KernelSU"
+            ksu_branch: "master-susfs"
+            use_susfs: true
+            defconfig: caimito_defconfig
+          - codename: caimito
+            variant_name: "KowSU-SUSFS"
+            kernel_repo: "https://github.com/kerneltoast/android_kernel_google_tensynos"
+            kernel_branch: "16.0.0-sultan"
+            ksu_repo: "https://github.com/KOWX712/KernelSU"
+            ksu_branch: "master"
+            use_susfs: true
+            defconfig: caimito_defconfig
+          - codename: caimito
+            variant_name: "xxKSU"
+            kernel_repo: "https://github.com/kerneltoast/android_kernel_google_tensynos"
+            kernel_branch: "16.0.0-sultan"
+            ksu_repo: "https://github.com/backslashxx/KernelSU"
+            ksu_branch: "master"
+            use_susfs: false
+            defconfig: caimito_defconfig
 
     steps:
       - uses: actions/checkout@v6
@@ -78,10 +126,12 @@ jobs:
           patch -p1 < ../kernel_patches/sultan/61_scripts_setlocalversion.patch
           patch -p1 < ../kernel_patches/sultan/62_init_Makefile.patch
           
-          if [[ "${{ matrix.variant_name }}" == "KowSU-SUSFS" ]]; then
-            cd ../KernelSU
-            patch -p1 -l --fuzz=3 < ../kernel_patches/kowsu/10_enable_susfs_for_ksu.patch
-            cd ../sultan
+          if [[ "${{ matrix.variant_name }}" == *"SUSFS" ]]; then
+            if [[ "${{ matrix.variant_name }}" == *"KowSU"* ]]; then
+               cd ../KernelSU
+               patch -p1 -l --fuzz=3 < ../kernel_patches/kowsu/10_enable_susfs_for_ksu.patch
+               cd ../sultan
+            fi
             cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch ./
             cp -r ../susfs4ksu/kernel_patches/fs/* ./fs/
             cp -r ../susfs4ksu/kernel_patches/include/linux/* ./include/linux/
@@ -163,7 +213,13 @@ jobs:
       - name: Packaging
         run: |
           cp sultan/out/arch/arm64/boot/Image.lz4 AK3/Image.lz4 || cp sultan/out/arch/arm64/boot/Image AK3/Image
-          cat sultan/out/${{ matrix.dtb_path }}/*.dtb > AK3/dtb
+          
+          # Refined DTB logic: Shusky and Caimito use unified device paths
+          if [ -d "sultan/out/google-devices/${{ matrix.codename }}/dts" ]; then
+            cat sultan/out/google-devices/${{ matrix.codename }}/dts/*.dtb > AK3/dtb
+          else
+            cat sultan/out/arch/arm64/boot/dts/google/*.dtb > AK3/dtb
+          fi
           
           STAG="${{ steps.meta.outputs.s_tag }}"
           KVER="${{ steps.meta.outputs.ksu_ver }}"
@@ -178,26 +234,25 @@ jobs:
           cd AK3 && zip -r9 "../${ZIP_NAME}" . -x "*.git*"
           echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_ENV"
 
-      - name: Create Release per Variant
+      - name: Create Release
         env:
           GH_TOKEN: ${{ github.token }}
           S_TAG: ${{ steps.meta.outputs.s_tag }}
           K_VER: ${{ steps.meta.outputs.ksu_ver }}
           S_VER: ${{ steps.meta.outputs.susfs_ver }}
         run: |
-          # 1. Generate Tag (Atomic check to prevent collisions)
           DATE_STR=$(date +"%y%m%d")
+          sleep $((RANDOM % 30))
           COUNT=$(gh api repos/${{ github.repository }}/tags --jq '.[].name' | grep "$DATE_STR" | wc -l || echo "0")
           TAG="${DATE_STR}-r$((COUNT + 1))"
           
-          # 2. Construct Body
           cat <<EOF > body.md
           ### 🚀 Build Information
           | Component | Details |
           | :--- | :--- |
           | **Kernel Base** | [Sultan ($S_TAG)](${{ matrix.kernel_repo }}) |
           | **Compiler** | [GCC ${{ env.GCC_VERSION }}](https://kernel.org/pub/tools/crosstool/files/bin/x86_64/${{ env.GCC_VERSION }}/) |
-          | **Variant** | [${{ matrix.variant_name }}](https://github.com/yapixel/kernel_patches/tree/master/sultan) |
+          | **Variant** | [${{ matrix.variant_name }}](https://github.com/yapixel/kernel_patches) |
           | **KSU Version** | [r$K_VER](${{ matrix.ksu_repo }}) |
           EOF
           
@@ -205,5 +260,6 @@ jobs:
             echo "| **SUSFS Version** | [$S_VER](${{ env.SUSFS_REPO }}) |" >> body.md
           fi
           
-          # 3. Create Release and Upload the specific variant zip
-          gh release create "$TAG" "${{ env.ZIP_NAME }}" --title "Kernel Build — $TAG" --notes-file body.md
+          for i in {1..10}; do
+            gh release create "$TAG" "${{ env.ZIP_NAME }}" --title "Kernel Build — $TAG" --notes-file body.md && break || (echo "Conflict, retrying..." && sleep 30)
+          done
