@@ -1,45 +1,18 @@
-name: Publish Sultan Release
-
-on:
-  workflow_run:
-    workflows: ["Build Unified Pixel Kernel — Sultan Matrix"]
-    types:
-      - completed
-
-permissions:
-  contents: write
-  actions: read
-
-jobs:
-  publish:
-    name: Gather and Release
-    runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Optional: helps with tag history if needed
-
-      - name: Download Build Artifacts
-        uses: actions/download-artifact@v4  # Updated to latest v4
-        with:
-          run-id: ${{ github.event.workflow_run.id }}
-          path: zips
-          merge-multiple: true
-          github-token: ${{ github.token }}
-
-      - name: Generate Release Metadata
+- name: Generate Release Metadata
         run: |
           DATE_STR=$(date +"%Y%m%d")
-          TAG="\( {DATE_STR}-r \){{ github.event.workflow_run.run_number }}"
+          RUN_NUMBER=${{ github.event.workflow_run.run_number }}
+          
+          # Clean and valid tag: e.g. 20250415-r42
+          TAG="\( {DATE_STR}-r \){RUN_NUMBER}"
+          
           echo "RELEASE_TAG=$TAG" >> $GITHUB_ENV
           
           cat <<EOF > body.md
           ### Sultan Kernel Matrix Release
           - **Triggered by**: ${{ github.event.workflow_run.head_branch }}
           - **Compiler**: GCC 14.2.0 (Non-LTO)
+          - **Build Number**: ${RUN_NUMBER}
           
           | Variant | KSU Implementation | SUSFS Support |
           | :--- | :--- | :--- |
@@ -47,15 +20,5 @@ jobs:
           | **xxKSU** | backslashxx | None |
           | **KowSU-SUSFS** | KOWX712 | Patched |
           
-          Generated from Build #${{ github.event.workflow_run.run_number }}
+          Generated from Build #${RUN_NUMBER}
           EOF
-
-      - name: Create GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "${{ env.RELEASE_TAG }}" zips/*.zip \
-            --title "Sultan Matrix - ${{ env.RELEASE_TAG }}" \
-            --notes-file body.md \
-            --draft=false \
-            --prerelease=false
