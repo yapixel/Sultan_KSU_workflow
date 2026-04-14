@@ -1,6 +1,6 @@
 # Sultan Matrix — Unified Pixel Kernel
 
-A high-performance, security-focused kernel for Pixel devices (Zuma/Zpro), merging the stability of **Sultan Kernel** with advanced stealth and networking features.
+A high-performance, security-focused kernel for Pixel devices (gs201/zuma/zumapro), merging the stability of **Sultan Kernel** with advanced stealth and networking features.
 
 ## 🚀 Key Features
 - **Stealth Core:** Integrated **SUSFS** support and **KernelSU** (xxKSU/KowSU variants).
