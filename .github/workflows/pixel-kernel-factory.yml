@@ -15,13 +15,12 @@ env:
 
 jobs:
   build:
-    name: Build ${{ matrix.codename }} (${{ matrix.variant_name  }})
+    name: Build ${{ matrix.codename }} (${{ matrix.variant_name }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          # --- Category I: xxKSU-SUSFS (Anaconda + Trijal08 KSU) ---
           - codename: zuma
             variant_name: "xxKSU-SUSFS"
             kernel_repo: "https://github.com/Trijal08/anaconda_kernel_google_tensynos"
@@ -32,7 +31,6 @@ jobs:
             dtb_path: "google-devices/zuma/dts"
             defconfig: zuma_defconfig
 
-          # --- Category II: KowSU-SUSFS (Official Sultan + KOWX712) ---
           - codename: zuma
             variant_name: "KowSU-SUSFS"
             kernel_repo: "https://github.com/kerneltoast/android_kernel_google_tensynos"
@@ -43,7 +41,6 @@ jobs:
             dtb_path: "google-devices/zuma/dts"
             defconfig: zuma_defconfig
 
-          # --- Category III: xxKSU (Official Sultan + backslashxx) ---
           - codename: zuma
             variant_name: "xxKSU"
             kernel_repo: "https://github.com/kerneltoast/android_kernel_google_tensynos"
@@ -77,18 +74,14 @@ jobs:
       - name: Integration & Patching
         run: |
           cd sultan
-          # 1. Reproducibility Patches (60, 61, 62)
           patch -p1 < ../kernel_patches/sultan/60_scripts_mkcompile_h.patch
           patch -p1 < ../kernel_patches/sultan/61_scripts_setlocalversion.patch
           patch -p1 < ../kernel_patches/sultan/62_init_Makefile.patch
           
-          # 2. Variant Specific Logic
           if [[ "${{ matrix.variant_name }}" == "KowSU-SUSFS" ]]; then
-            # Patch KSU (10 Patch)
             cd ../KernelSU
             patch -p1 -l --fuzz=3 < ../kernel_patches/kowsu/10_enable_susfs_for_ksu.patch
             cd ../sultan
-            # Patch Kernel (50 Patch + sys.c_fix)
             cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch ./
             cp -r ../susfs4ksu/kernel_patches/fs/* ./fs/
             cp -r ../susfs4ksu/kernel_patches/include/linux/* ./include/linux/
@@ -96,7 +89,6 @@ jobs:
             patch -p1 --fuzz=3 < ../kernel_patches/sultan/sys.c_fix.patch
           fi
 
-          # 3. Driver Linking
           ln -sf ../../KernelSU/kernel drivers/kernelsu
           sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
           echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
@@ -104,19 +96,16 @@ jobs:
       - name: Metadata Extraction
         id: meta
         run: |
-          # Kernel ID (Tag or SHA)
           if [[ "${{ matrix.kernel_repo }}" == *"anaconda"* ]]; then
             S_TAG=$(git -C sultan rev-parse --short HEAD)
           else
             S_TAG=$(git -C sultan tag --sort=-committerdate | head -n1)
           fi
           
-          # KSU Revision
           chmod +x ./sh/get_ksuver.sh
           KSU_ORG=$(echo "${{ matrix.ksu_repo }}" | cut -d'/' -f4)
           K_VER=$(./sh/get_ksuver.sh "$KSU_ORG" "KernelSU" "${{ matrix.ksu_branch }}" || echo "unknown")
           
-          # SUSFS Version
           if [ "${{ matrix.use_susfs }}" = "true" ]; then
             S_VER=$(grep -m1 'define SUSFS_VERSION' sultan/include/linux/susfs.h | grep -oP '".*?"' | tr -d '"' || echo "integrated")
           else
@@ -134,7 +123,6 @@ jobs:
           export CC=${{ env.GCC_PATH }}gcc
           make O=out ${{ matrix.defconfig }}
           
-          # Inject Configuration Pillars
           cat <<EOF >> out/.config
           CONFIG_KSU=y
           CONFIG_NETFILTER_ADVANCED=y
@@ -190,49 +178,32 @@ jobs:
           cd AK3 && zip -r9 "../${ZIP_NAME}" . -x "*.git*"
           echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_ENV"
 
-      - name: Upload
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.variant_name }}-${{ matrix.codename }}
-          path: ${{ env.ZIP_NAME }}
-
-
- release:
- needs: build
- runs-on: ubuntu-latest
- permissions: { contents: write }
- steps:
-      - uses: actions/download-artifact@v4
-        with: 
-          path: ./artifacts
-          merge-multiple: true
-      
-      - name: Create GitHub Release
+      - name: Create Release per Variant
         env:
           GH_TOKEN: ${{ github.token }}
+          S_TAG: ${{ steps.meta.outputs.s_tag }}
+          K_VER: ${{ steps.meta.outputs.ksu_ver }}
+          S_VER: ${{ steps.meta.outputs.susfs_ver }}
         run: |
-          # 1. Generate the Tag
+          # 1. Generate Tag (Atomic check to prevent collisions)
           DATE_STR=$(date +"%y%m%d")
-          # Check for existing tags to increment rX
-          EXISTING_COUNT=$(gh api repos/${{ github.repository }}/tags --jq '.[].name' | grep "$DATE_STR" | wc -l || echo "0")
-          TAG="${DATE_STR}-r$((EXISTING_COUNT + 1))"
+          COUNT=$(gh api repos/${{ github.repository }}/tags --jq '.[].name' | grep "$DATE_STR" | wc -l || echo "0")
+          TAG="${DATE_STR}-r$((COUNT + 1))"
           
-          # 2. Extract info from the artifact filenames to build the body
-          # We parse the first zip found to reconstruct the dashboard
-          SAMPLE_ZIP=$(ls artifacts/*.zip | head -n 1 | xargs basename)
-          
-          # Logic to build a clean body without needing matrix variables
+          # 2. Construct Body
           cat <<EOF > body.md
           ### 🚀 Build Information
           | Component | Details |
           | :--- | :--- |
-          | **Build Date** | $(date +"%Y-%m-%d") |
-          | **Toolchain** | [GCC 14.2.0](https://kernel.org/pub/tools/crosstool/files/bin/x86_64/14.2.0/) |
-          | **Status** | Stable / Unified |
+          | **Kernel Base** | [Sultan ($S_TAG)](${{ matrix.kernel_repo }}) |
+          | **Compiler** | [GCC ${{ env.GCC_VERSION }}](https://kernel.org/pub/tools/crosstool/files/bin/x86_64/${{ env.GCC_VERSION }}/) |
+          | **Variant** | [${{ matrix.variant_name }}](https://github.com/yapixel/kernel_patches/tree/master/sultan) |
+          | **KSU Version** | [r$K_VER](${{ matrix.ksu_repo }}) |
           EOF
           
-          # 3. Final Release Creation
-          gh release create "$TAG" artifacts/*.zip --title "Kernel Build — $TAG" --notes-file body.md
+          if [ "$S_VER" != "none" ]; then
+            echo "| **SUSFS Version** | [$S_VER](${{ env.SUSFS_REPO }}) |" >> body.md
           fi
           
-          gh release create "$TAG" artifacts/*.zip --title "Kernel Build — $TAG" --notes-file body.md
+          # 3. Create Release and Upload the specific variant zip
+          gh release create "$TAG" "${{ env.ZIP_NAME }}" --title "Kernel Build — $TAG" --notes-file body.md
