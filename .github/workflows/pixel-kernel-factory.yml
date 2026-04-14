@@ -196,19 +196,12 @@ jobs:
           name: ${{ matrix.variant_name }}-${{ matrix.codename }}
           path: ${{ env.ZIP_NAME }}
 
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions: { contents: write }
-    steps:
-      - uses: actions/download-artifact@v4
-        with: { path: ./artifacts, merge-multiple: true }
-      
-     release:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions: { contents: write }
-    steps:
+
+      release:
+      needs: build
+      runs-on: ubuntu-latest
+      permissions: { contents: write }
+      steps:
       - uses: actions/download-artifact@v4
         with: 
           path: ./artifacts
