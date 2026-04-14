@@ -14,93 +14,36 @@ env:
   KBUILD_BUILD_HOST: "build-host"
 
 jobs:
-  build:
+  build-xxksu:
     name: ${{ matrix.variant_name }} (${{ matrix.codename }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
+        codename: [gs201, zuma, zumapro]
+        include_susfs: [true, false]
         include:
-          # --- GS201 (Pixel 7 / 7 Pro) ---
-          - codename: gs201
+          - include_susfs: true
             variant_name: "xxKSU-SUSFS"
             kernel_repo: "https://github.com/Trijal08/anaconda_kernel_google_tensynos"
             kernel_branch: "anaconda-tensynos-qpr3"
             ksu_repo: "https://github.com/Trijal08/KernelSU"
             ksu_branch: "master-susfs"
-            use_susfs: true
-            defconfig: gs201_defconfig
+          - include_susfs: false
+            variant_name: "xxKSU"
+            kernel_repo: "https://github.com/kerneltoast/android_kernel_google_tensynos"
+            kernel_branch: "16.0.0-sultan"
+            ksu_repo: "https://github.com/backslashxx/KernelSU"
+            ksu_branch: "master"
           - codename: gs201
-            variant_name: "KowSU-SUSFS"
-            kernel_repo: "https://github.com/kerneltoast/android_kernel_google_tensynos"
-            kernel_branch: "16.0.0-sultan"
-            ksu_repo: "https://github.com/KOWX712/KernelSU"
-            ksu_branch: "master"
-            use_susfs: true
             defconfig: gs201_defconfig
-          - codename: gs201
-            variant_name: "xxKSU"
-            kernel_repo: "https://github.com/kerneltoast/android_kernel_google_tensynos"
-            kernel_branch: "16.0.0-sultan"
-            ksu_repo: "https://github.com/backslashxx/KernelSU"
-            ksu_branch: "master"
-            use_susfs: false
-            defconfig: gs201_defconfig
-
-          # --- ZUMA (Pixel 8 / 8 Pro) ---
           - codename: zuma
-            variant_name: "xxKSU-SUSFS"
-            kernel_repo: "https://github.com/Trijal08/anaconda_kernel_google_tensynos"
-            kernel_branch: "anaconda-tensynos-qpr3"
-            ksu_repo: "https://github.com/Trijal08/KernelSU"
-            ksu_branch: "master-susfs"
-            use_susfs: true
             defconfig: zuma_defconfig
-          - codename: zuma
-            variant_name: "KowSU-SUSFS"
-            kernel_repo: "https://github.com/kerneltoast/android_kernel_google_tensynos"
-            kernel_branch: "16.0.0-sultan"
-            ksu_repo: "https://github.com/KOWX712/KernelSU"
-            ksu_branch: "master"
-            use_susfs: true
-            defconfig: zuma_defconfig
-          - codename: zuma
-            variant_name: "xxKSU"
-            kernel_repo: "https://github.com/kerneltoast/android_kernel_google_tensynos"
-            kernel_branch: "16.0.0-sultan"
-            ksu_repo: "https://github.com/backslashxx/KernelSU"
-            ksu_branch: "master"
-            use_susfs: false
-            defconfig: zuma_defconfig
-
-          # --- ZUMAPRO (Pixel 9 / 9P / 9PXL) ---
           - codename: zumapro
-            variant_name: "xxKSU-SUSFS"
-            kernel_repo: "https://github.com/Trijal08/anaconda_kernel_google_tensynos"
-            kernel_branch: "anaconda-tensynos-qpr3"
-            ksu_repo: "https://github.com/Trijal08/KernelSU"
-            ksu_branch: "master-susfs"
-            use_susfs: true
-            defconfig: zumapro_defconfig
-          - codename: zumapro
-            variant_name: "KowSU-SUSFS"
-            kernel_repo: "https://github.com/kerneltoast/android_kernel_google_tensynos"
-            kernel_branch: "16.0.0-sultan"
-            ksu_repo: "https://github.com/KOWX712/KernelSU"
-            ksu_branch: "master"
-            use_susfs: true
-            defconfig: zumapro_defconfig
-          - codename: zumapro
-            variant_name: "xxKSU"
-            kernel_repo: "https://github.com/kerneltoast/android_kernel_google_tensynos"
-            kernel_branch: "16.0.0-sultan"
-            ksu_repo: "https://github.com/backslashxx/KernelSU"
-            ksu_branch: "master"
-            use_susfs: false
             defconfig: zumapro_defconfig
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: Setup Toolchain
         run: |
@@ -111,13 +54,13 @@ jobs:
       - name: Clone Components
         run: |
           git clone --depth=1 "${{ matrix.kernel_repo }}" -b "${{ matrix.kernel_branch }}" sultan
+          if [[ "${{ matrix.include_susfs }}" == "true" ]]; then
+            git -C sultan submodule update --init --recursive --depth=1
+          fi
           git clone --depth=1 "${{ matrix.ksu_repo }}" -b "${{ matrix.ksu_branch }}" KernelSU
           git clone --depth=1 "${{ env.ANYKERNEL_REPO }}" -b "sultan-${{ matrix.codename }}" AK3
           git clone --depth=1 "${{ env.PATCHES_REPO }}" kernel_patches
           git clone --depth=1 "${{ env.SCRIPTS_REPO }}" sh
-          if [[ "${{ matrix.use_susfs }}" == "true" && "${{ matrix.variant_name }}" == *"KowSU"* ]]; then
-            git clone --depth=1 "${{ env.SUSFS_REPO }}" -b "gki-android14-6.1" susfs4ksu
-          fi
 
       - name: Integration & Patching
         run: |
@@ -126,19 +69,6 @@ jobs:
           patch -p1 < ../kernel_patches/sultan/61_scripts_setlocalversion.patch || true
           patch -p1 < ../kernel_patches/sultan/62_init_Makefile.patch || true
 
-          if [[ "${{ matrix.use_susfs }}" == "true" && "${{ matrix.variant_name }}" == *"KowSU"* ]]; then
-            cd ../KernelSU
-            patch -p1 -l --fuzz=3 < ../kernel_patches/kowsu/10_enable_susfs_for_ksu.patch || true
-            cd ../sultan
-
-            cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch ./
-            cp -r ../susfs4ksu/kernel_patches/fs/* ./fs/
-            cp -r ../susfs4ksu/kernel_patches/include/linux/* ./include/linux/
-
-            patch -p1 --fuzz=10 < 50_add_susfs_in_gki-android14-6.1.patch || true
-            patch -p1 --fuzz=3 < ../kernel_patches/sultan/sys.c_fix.patch || true
-          fi
-
           ln -sf ../../KernelSU/kernel drivers/kernelsu
           sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
           echo 'obj-$(CONFIG_KSU) += kernelsu/' >> drivers/Makefile
@@ -146,15 +76,11 @@ jobs:
       - name: Metadata Extraction
         id: meta
         run: |
-          if [[ "${{ matrix.kernel_repo }}" == *"anaconda"* ]]; then
-            S_TAG=$(git -C sultan rev-parse --short HEAD)
-          else
-            S_TAG=$(git -C sultan tag --sort=-committerdate | head -n1)
-          fi
+          S_TAG=$(git -C sultan rev-parse --short HEAD)
           chmod +x ./sh/get_ksuver.sh
           KSU_ORG=$(echo "${{ matrix.ksu_repo }}" | cut -d'/' -f4)
           K_VER=$(./sh/get_ksuver.sh "$KSU_ORG" "KernelSU" "${{ matrix.ksu_branch }}" || echo "unknown")
-          if [ "${{ matrix.use_susfs }}" = "true" ]; then
+          if [ "${{ matrix.include_susfs }}" = "true" ]; then
             S_VER=$(grep -m1 'define SUSFS_VERSION' sultan/include/linux/susfs.h | grep -oP '".*?"' | tr -d '"' || echo "integrated")
           else
             S_VER="none"
@@ -244,7 +170,7 @@ jobs:
           CONFIG_TMPFS_INODE64=y
           EOF
 
-          if [[ "${{ matrix.use_susfs }}" == "true" ]]; then
+          if [[ "${{ matrix.include_susfs }}" == "true" ]]; then
             cat <<EOF >> "$DEFCONFIG"
           # SUSFS Stealth Pillars
           CONFIG_KSU_SUSFS=y
@@ -264,14 +190,12 @@ jobs:
           EOF
           fi
 
-          if [[ "${{ matrix.variant_name }}" == *"xxKSU"* ]]; then
-            cat <<EOF >> "$DEFCONFIG"
+          cat <<EOF >> "$DEFCONFIG"
           # xxKSU Hookless Pillars
           CONFIG_KSU_TAMPER_SYSCALL_TABLE=y
           CONFIG_KSU_LSM_SECURITY_HOOKS=y
           CONFIG_KSU_THRONE_TRACKER_ALWAYS_THREADED=y
           EOF
-          fi
 
           sed -i 's/CONFIG_TCP_CONG_BIC=y/CONFIG_TCP_CONG_BIC=n/' "$DEFCONFIG"
           sed -i 's/CONFIG_TCP_CONG_WESTWOOD=y/CONFIG_TCP_CONG_WESTWOOD=n/' "$DEFCONFIG"
@@ -297,29 +221,26 @@ jobs:
           if [[ "${{ matrix.variant_name }}" == "xxKSU" ]]; then
             ZIP_NAME="Sultan-${{ matrix.codename }}-${STAG}-xxKSU-r${KVER}.zip"
           else
-            ZIP_NAME="Sultan-${{ matrix.codename }}-${STAG}-${{ matrix.variant_name }}-r${KVER}-SUSFS-${SVER}.zip"
+            ZIP_NAME="Sultan-${{ matrix.codename }}-${STAG}-xxKSU-SUSFS-r${KVER}-SUSFS-${SVER}.zip"
           fi
           cd AK3 && zip -r9 "../${ZIP_NAME}" . -x "*.git*"
           echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_ENV"
 
-      - name: Create Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          DATE_STR=$(date +"%y%m%d")
-          sleep $((RANDOM % 30))
-          COUNT=$(gh api repos/${{ github.repository }}/tags --jq '.[].name' | grep "$DATE_STR" | wc -l || echo "0")
-          TAG="${DATE_STR}-r$((COUNT + 1))"
-          cat <<EOF > body.md
-          ### 🚀 Build Information
-          | Component | Details |
-          | :--- | :--- |
-          | **Kernel Base** | [Sultan (${{ steps.meta.outputs.s_tag }})](${{ matrix.kernel_repo }}) |
-          | **Compiler** | [GCC ${{ env.GCC_VERSION }}](https://kernel.org/pub/tools/crosstool/files/bin/x86_64/${{ env.GCC_VERSION }}/) |
-          | **Variant** | [${{ matrix.variant_name }}](https://github.com/yapixel/kernel_patches) |
-          | **KSU Version** | [r${{ steps.meta.outputs.ksu_ver }}](${{ matrix.ksu_repo }}) |
-          | **SUSFS Version** | [${{ steps.meta.outputs.susfs_ver }}](${{ env.SUSFS_REPO }}) |
-          EOF
-          for i in {1..10}; do
-            gh release create "$TAG" "${{ env.ZIP_NAME }}" --title "Kernel Build — $TAG" --notes-file body.md && break || (echo "Retrying..." && sleep 30)
-          done
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.variant_name }}-${{ matrix.codename }}
+          path: ${{ env.ZIP_NAME }}
+          retention-days: 1
+
+  build-kowsu:
+    name: ${{ matrix.variant_name }} (${{ matrix.codename }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - codename: gs201
+            variant_name: "KowSU-SUSFS"
+            kernel_repo: "https://github.com/kerneltoast/android_kernel_google_tensynos"
+            kernel_branch: "16.0.0-sultan"
