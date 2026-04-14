@@ -21,7 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # --- GS201 (Pixel 7 / 7 Pro) ---
+          # --- GS201 (Pixel 7 Series) ---
           - codename: gs201
             variant_name: "xxKSU-SUSFS"
             kernel_repo: "https://github.com/Trijal08/anaconda_kernel_google_tensynos"
@@ -136,7 +136,7 @@ jobs:
             cp -r ../susfs4ksu/kernel_patches/fs/* ./fs/
             cp -r ../susfs4ksu/kernel_patches/include/linux/* ./include/linux/
             
-            # Use || true on 50 patch as requested to allow sys.c_fix to resolve offsets
+            # As requested: || true for 50 patch, then sys.c_fix to resolve conflicts
             patch -p1 --fuzz=10 < 50_add_susfs_in_gki-android14-6.1.patch || true
             patch -p1 --fuzz=3 < ../kernel_patches/sultan/sys.c_fix.patch || true
           fi
@@ -174,15 +174,9 @@ jobs:
           
           DEFCONFIG="out/.config"
 
-          # --- APPLY EXACT USER POWER CONFIG ---
+          # --- POWER CONFIG ---
           cat <<EOF >> "$DEFCONFIG"
-          # KernelSU Core (Source Integrated)
           CONFIG_KSU=y
-          # CONFIG_KSU_KPROBES_HOOK is not set
-          # CONFIG_KSU_DEBUG is not set
-          # CONFIG_KSU_ALLOWLIST_WORKAROUND is not set
-
-          # atp4pixel Networking & System Pillars
           CONFIG_NETFILTER_ADVANCED=y
           CONFIG_IP_NF_TARGET_TTL=y
           CONFIG_IP6_NF_TARGET_HL=y
@@ -247,7 +241,7 @@ jobs:
           CONFIG_TMPFS_INODE64=y
           EOF
 
-          # --- APPLY SUSFS STEALTH PILLARS ---
+          # --- SUSFS PILLARS ---
           if [[ "${{ matrix.use_susfs }}" == "true" ]]; then
             cat <<EOF >> "$DEFCONFIG"
           CONFIG_KSU_SUSFS=y
@@ -264,11 +258,10 @@ jobs:
           CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
           CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
           CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-          # CONFIG_KSU_SUSFS_ENABLE_LOG is not set
           EOF
           fi
 
-          # --- APPLY xxKSU HOOKLESS SECURITY CONFIG ---
+          # --- xxKSU HOOKLESS FLAGS ---
           if [[ "${{ matrix.variant_name }}" == *"xxKSU"* ]]; then
             cat <<EOF >> "$DEFCONFIG"
           CONFIG_KSU_TAMPER_SYSCALL_TABLE=y
@@ -277,7 +270,7 @@ jobs:
           EOF
           fi
 
-          # --- APPLY GUARDRAILS ---
+          # --- GUARDRAILS ---
           sed -i 's/CONFIG_TCP_CONG_BIC=y/CONFIG_TCP_CONG_BIC=n/' "$DEFCONFIG"
           sed -i 's/CONFIG_TCP_CONG_WESTWOOD=y/CONFIG_TCP_CONG_WESTWOOD=n/' "$DEFCONFIG"
           sed -i 's/CONFIG_TCP_CONG_HTCP=y/CONFIG_TCP_CONG_HTCP=n/' "$DEFCONFIG"
@@ -313,7 +306,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           DATE_STR=$(date +"%y%m%d")
-          sleep $((RANDOM % 45))
+          sleep $((RANDOM % 30))
           COUNT=$(gh api repos/${{ github.repository }}/tags --jq '.[].name' | grep "$DATE_STR" | wc -l || echo "0")
           TAG="${DATE_STR}-r$((COUNT + 1))"
           cat <<EOF > body.md
@@ -327,5 +320,5 @@ jobs:
           | **SUSFS Version** | [${{ steps.meta.outputs.susfs_ver }}](${{ env.SUSFS_REPO }}) |
           EOF
           for i in {1..10}; do
-            gh release create "$TAG" "${{ env.ZIP_NAME }}" --title "Kernel Build — $TAG" --notes-file body.md && break || (echo "Retrying..." && sleep 45)
+            gh release create "$TAG" "${{ env.ZIP_NAME }}" --title "Kernel Build — $TAG" --notes-file body.md && break || (echo "Retrying..." && sleep 30)
           done
