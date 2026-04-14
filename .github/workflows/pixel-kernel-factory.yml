@@ -55,7 +55,7 @@ jobs:
 
       - name: Cache GCC Toolchain
         id: gcc-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: gcc-${{ env.GCC_VERSION }}-nolibc
           key: gcc-${{ env.GCC_VERSION }}
@@ -246,7 +246,7 @@ jobs:
           echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_ENV"
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: ${{ matrix.variant_name }}-${{ matrix.codename }}
           path: ${{ env.ZIP_NAME }}
@@ -294,7 +294,7 @@ jobs:
 
       - name: Cache GCC Toolchain
         id: gcc-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: gcc-${{ env.GCC_VERSION }}-nolibc
           key: gcc-${{ env.GCC_VERSION }}
@@ -474,7 +474,7 @@ jobs:
           echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_ENV"
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v8.0.1
         with:
           name: KowSU-SUSFS-${{ matrix.codename }}
           path: ${{ env.ZIP_NAME }}
@@ -488,7 +488,7 @@ jobs:
       contents: write
     steps:
       - name: Download All Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7.0.1
         with:
           path: zips
           merge-multiple: true
