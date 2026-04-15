@@ -50,8 +50,8 @@ jobs:
 
       - name: Clone Components
         run: |
-          git clone --depth=1 "https://github.com/kerneltoast/android_kernel_google_tensynos" -b "16.0.0-sultan" sultan
-          git clone --depth=1 "https://github.com/backslashxx/KernelSU" -b "master" KernelSU
+          git clone --depth=1 https://github.com/kerneltoast/android_kernel_google_tensynos -b "16.0.0-sultan" sultan
+          git clone --depth=1 https://github.com/backslashxx/KernelSU -b "master" KernelSU
           git clone --depth=1 "\( {{ env.ANYKERNEL_REPO }}" -b "sultan- \){{ matrix.codename }}" AK3
           git clone --depth=1 "${{ env.PATCHES_REPO }}" kernel_patches
           git clone --depth=1 "${{ env.SCRIPTS_REPO }}" sh
@@ -151,9 +151,9 @@ jobs:
 
       - name: Clone Components
         run: |
-          git clone --depth=1 "https://github.com/Trijal08/anaconda_kernel_google_tensynos" -b "anaconda-tensynos-qpr3" sultan
+          git clone --depth=1 https://github.com/Trijal08/anaconda_kernel_google_tensynos -b "anaconda-tensynos-qpr3" sultan
           git -C sultan submodule update --init --recursive --depth=1
-          git clone --depth=1 "https://github.com/Trijal08/KernelSU" -b "master-susfs" KernelSU
+          git clone --depth=1 https://github.com/Trijal08/KernelSU -b "master-susfs" KernelSU
           git clone --depth=1 "\( {{ env.ANYKERNEL_REPO }}" -b "sultan- \){{ matrix.codename }}" AK3
           git clone --depth=1 "${{ env.PATCHES_REPO }}" kernel_patches
           git clone --depth=1 "${{ env.SCRIPTS_REPO }}" sh
@@ -253,8 +253,8 @@ jobs:
 
       - name: Clone Components
         run: |
-          git clone --depth=1 "https://github.com/kerneltoast/android_kernel_google_tensynos" -b "16.0.0-sultan" sultan
-          git clone --depth=1 "https://github.com/KOWX712/KernelSU" -b "master" KernelSU
+          git clone --depth=1 https://github.com/kerneltoast/android_kernel_google_tensynos -b "16.0.0-sultan" sultan
+          git clone --depth=1 https://github.com/KOWX712/KernelSU -b "master" KernelSU
           git clone --depth=1 "\( {{ env.ANYKERNEL_REPO }}" -b "sultan- \){{ matrix.codename }}" AK3
           git clone --depth=1 "${{ env.PATCHES_REPO }}" kernel_patches
           git clone --depth=1 "${{ env.SCRIPTS_REPO }}" sh
@@ -339,10 +339,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6   # kept your version
+        uses: actions/checkout@v6
 
       - name: Download Build Artifacts
-        uses: actions/download-artifact@v4   # minimal safe version for merge-multiple
+        uses: actions/download-artifact@v4
         with:
           path: zips
           merge-multiple: true
@@ -374,7 +374,7 @@ jobs:
           | **xxKSU**        | backslashxx        | None          |
           | **KowSU-SUSFS**  | KOWX712            | Patched       |
 
-          All variants built successfully.
+          All variants built successfully and attached below.
           EOF
 
       - name: Create GitHub Release
