@@ -69,7 +69,8 @@ jobs:
       - name: Metadata Extraction
         id: meta
         run: |
-          S_TAG=$(git -C sultan rev-parse --short HEAD || echo "unknown")
+          # Pull the branch name (16.0.0-sultan) as the tag
+          S_TAG=$(git -C sultan rev-parse --abbrev-ref HEAD)
           chmod +x ./sh/get_ksuver.sh
           K_VER=$(./sh/get_ksuver.sh "backslashxx" "KernelSU" "master" || echo "unknown")
           echo "s_tag=$S_TAG" >> "$GITHUB_OUTPUT"
@@ -110,7 +111,7 @@ jobs:
           echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_ENV"
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v4
         with:
           name: xxKSU-${{ matrix.codename }}
           path: ${{ env.ZIP_NAME }}
@@ -171,7 +172,8 @@ jobs:
       - name: Metadata Extraction
         id: meta
         run: |
-          S_TAG=$(git -C sultan rev-parse --short HEAD || echo "unknown")
+          # This build uses Anaconda but we'll label it Sultan-QPR3 for the tag
+          S_TAG="Sultan-QPR3"
           chmod +x ./sh/get_ksuver.sh
           K_VER=$(./sh/get_ksuver.sh "Trijal08" "KernelSU" "master-susfs" || echo "unknown")
           echo "s_tag=$S_TAG" >> "$GITHUB_OUTPUT"
@@ -207,12 +209,12 @@ jobs:
           else
             cat sultan/out/arch/arm64/boot/dts/google/*.dtb > AK3/dtb
           fi
-          ZIP_NAME="Sultan-${{ matrix.codename }}-${{ steps.meta.outputs.s_tag }}-xxKSU-SUSFS-r${{ steps.meta.outputs.ksu_ver }}.zip"
+          ZIP_NAME="Sultan-Anaconda-${{ matrix.codename }}-${{ steps.meta.outputs.s_tag }}-xxKSU-SUSFS-r${{ steps.meta.outputs.ksu_ver }}.zip"
           cd AK3 && zip -r9 "../${ZIP_NAME}" . -x "*.git*"
           echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_ENV"
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v4
         with:
           name: xxKSU-SUSFS-${{ matrix.codename }}
           path: ${{ env.ZIP_NAME }}
@@ -281,7 +283,7 @@ jobs:
       - name: Metadata Extraction
         id: meta
         run: |
-          S_TAG=$(git -C sultan rev-parse --short HEAD || echo "unknown")
+          S_TAG=$(git -C sultan rev-parse --abbrev-ref HEAD)
           chmod +x ./sh/get_ksuver.sh
           K_VER=$(./sh/get_ksuver.sh "KOWX712" "KernelSU" "master" || echo "unknown")
           echo "s_tag=$S_TAG" >> "$GITHUB_OUTPUT"
@@ -317,17 +319,16 @@ jobs:
           else
             cat sultan/out/arch/arm64/boot/dts/google/*.dtb > AK3/dtb
           fi
-          ZIP_NAME="Sultan-${{ matrix.codename }}-${{ steps.meta.outputs.s_tag }}-KowSU-SUSFS-r${{ steps.meta.outputs.ksu_ver }}.zip"
+          ZIP_NAME="Sultan-KowSU-${{ matrix.codename }}-${{ steps.meta.outputs.s_tag }}-SUSFS-r${{ steps.meta.outputs.ksu_ver }}.zip"
           cd AK3 && zip -r9 "../${ZIP_NAME}" . -x "*.git*"
           echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_ENV"
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v4
         with:
           name: KowSU-SUSFS-${{ matrix.codename }}
           path: ${{ env.ZIP_NAME }}
 
-  # ==================== PUBLISH RELEASE JOB ====================
   publish-release:
     name: Publish Sultan Release
     runs-on: ubuntu-latest
@@ -353,15 +354,12 @@ jobs:
           RUN_NUMBER=${{ github.run_number }}
           SHORT_SHA=${{ github.sha }}
           SHORT_SHA=${SHORT_SHA:0:7}
-
           TAG="${DATE_STR}-r${RUN_NUMBER}"
-
           echo "RELEASE_TAG=$TAG" >> $GITHUB_ENV
           echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_ENV
 
           cat <<EOF > body.md
           ### Sultan Kernel Matrix Release
-
           **Build Number**: #${RUN_NUMBER}  
           **Triggered by**: Manual Dispatch  
           **Commit**: \`${SHORT_SHA}\`  
@@ -370,9 +368,9 @@ jobs:
 
           | Variant          | KSU Implementation | SUSFS Support |
           |------------------|--------------------|---------------|
-          | **xxKSU-SUSFS**  | Trijal08           | Integrated    |
-          | **xxKSU**        | backslashxx        | None          |
-          | **KowSU-SUSFS**  | KOWX712            | Patched       |
+          | **xxKSU-SUSFS** | Trijal08            | Integrated    |
+          | **xxKSU** | backslashxx        | None          |
+          | **KowSU-SUSFS** | KOWX712            | Patched       |
 
           All variants built successfully and attached below.
           EOF
