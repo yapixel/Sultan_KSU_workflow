@@ -46,13 +46,13 @@ jobs:
         run: wget -q "${{ env.GCC_ARCHIVE_URL }}" -O gcc.tar.gz && tar -xf gcc.tar.gz
 
       - name: Export Path
-        run: echo "GCC_PATH=\( PWD/gcc- \){{ env.GCC_VERSION }}-nolibc/aarch64-linux/bin/aarch64-linux-" >> "$GITHUB_ENV"
+        run: echo "GCC_PATH=$(pwd)/gcc-${{ env.GCC_VERSION }}-nolibc/aarch64-linux/bin/aarch64-linux-" >> "$GITHUB_ENV"
 
       - name: Clone Components
         run: |
           git clone --depth=1 https://github.com/kerneltoast/android_kernel_google_tensynos -b "16.0.0-sultan" sultan
           git clone --depth=1 https://github.com/backslashxx/KernelSU -b "master" KernelSU
-          git clone --depth=1 "\( {{ env.ANYKERNEL_REPO }}" -b "sultan- \){{ matrix.codename }}" AK3
+          git clone --depth=1 "${{ env.ANYKERNEL_REPO }}" -b "sultan-${{ matrix.codename }}" AK3
           git clone --depth=1 "${{ env.PATCHES_REPO }}" kernel_patches
           git clone --depth=1 "${{ env.SCRIPTS_REPO }}" sh
 
@@ -95,7 +95,7 @@ jobs:
           export CROSS_COMPILE=${{ env.GCC_PATH }}
           export CC=${{ env.GCC_PATH }}gcc
           make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" olddefconfig
-          make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="\( CC" -j" \)(nproc --all)"
+          make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" -j"$(nproc --all)"
 
       - name: Package Artifact
         run: |
@@ -105,7 +105,7 @@ jobs:
           else
             cat sultan/out/arch/arm64/boot/dts/google/*.dtb > AK3/dtb
           fi
-          ZIP_NAME="Sultan-\( {{ matrix.codename }}- \){{ steps.meta.outputs.s_tag }}-xxKSU-r${{ steps.meta.outputs.ksu_ver }}.zip"
+          ZIP_NAME="Sultan-${{ matrix.codename }}-${{ steps.meta.outputs.s_tag }}-xxKSU-r${{ steps.meta.outputs.ksu_ver }}.zip"
           cd AK3 && zip -r9 "../${ZIP_NAME}" . -x "*.git*"
           echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_ENV"
 
@@ -147,14 +147,14 @@ jobs:
         run: wget -q "${{ env.GCC_ARCHIVE_URL }}" -O gcc.tar.gz && tar -xf gcc.tar.gz
 
       - name: Export Path
-        run: echo "GCC_PATH=\( PWD/gcc- \){{ env.GCC_VERSION }}-nolibc/aarch64-linux/bin/aarch64-linux-" >> "$GITHUB_ENV"
+        run: echo "GCC_PATH=$(pwd)/gcc-${{ env.GCC_VERSION }}-nolibc/aarch64-linux/bin/aarch64-linux-" >> "$GITHUB_ENV"
 
       - name: Clone Components
         run: |
           git clone --depth=1 https://github.com/Trijal08/anaconda_kernel_google_tensynos -b "anaconda-tensynos-qpr3" sultan
           git -C sultan submodule update --init --recursive --depth=1
           git clone --depth=1 https://github.com/Trijal08/KernelSU -b "master-susfs" KernelSU
-          git clone --depth=1 "\( {{ env.ANYKERNEL_REPO }}" -b "sultan- \){{ matrix.codename }}" AK3
+          git clone --depth=1 "${{ env.ANYKERNEL_REPO }}" -b "sultan-${{ matrix.codename }}" AK3
           git clone --depth=1 "${{ env.PATCHES_REPO }}" kernel_patches
           git clone --depth=1 "${{ env.SCRIPTS_REPO }}" sh
 
@@ -197,7 +197,7 @@ jobs:
           export CROSS_COMPILE=${{ env.GCC_PATH }}
           export CC=${{ env.GCC_PATH }}gcc
           make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" olddefconfig
-          make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="\( CC" -j" \)(nproc --all)"
+          make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" -j"$(nproc --all)"
 
       - name: Package Artifact
         run: |
@@ -207,7 +207,7 @@ jobs:
           else
             cat sultan/out/arch/arm64/boot/dts/google/*.dtb > AK3/dtb
           fi
-          ZIP_NAME="Sultan-\( {{ matrix.codename }}- \){{ steps.meta.outputs.s_tag }}-xxKSU-SUSFS-r${{ steps.meta.outputs.ksu_ver }}.zip"
+          ZIP_NAME="Sultan-${{ matrix.codename }}-${{ steps.meta.outputs.s_tag }}-xxKSU-SUSFS-r${{ steps.meta.outputs.ksu_ver }}.zip"
           cd AK3 && zip -r9 "../${ZIP_NAME}" . -x "*.git*"
           echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_ENV"
 
@@ -249,13 +249,13 @@ jobs:
         run: wget -q "${{ env.GCC_ARCHIVE_URL }}" -O gcc.tar.gz && tar -xf gcc.tar.gz
 
       - name: Export Path
-        run: echo "GCC_PATH=\( PWD/gcc- \){{ env.GCC_VERSION }}-nolibc/aarch64-linux/bin/aarch64-linux-" >> "$GITHUB_ENV"
+        run: echo "GCC_PATH=$(pwd)/gcc-${{ env.GCC_VERSION }}-nolibc/aarch64-linux/bin/aarch64-linux-" >> "$GITHUB_ENV"
 
       - name: Clone Components
         run: |
           git clone --depth=1 https://github.com/kerneltoast/android_kernel_google_tensynos -b "16.0.0-sultan" sultan
           git clone --depth=1 https://github.com/KOWX712/KernelSU -b "master" KernelSU
-          git clone --depth=1 "\( {{ env.ANYKERNEL_REPO }}" -b "sultan- \){{ matrix.codename }}" AK3
+          git clone --depth=1 "${{ env.ANYKERNEL_REPO }}" -b "sultan-${{ matrix.codename }}" AK3
           git clone --depth=1 "${{ env.PATCHES_REPO }}" kernel_patches
           git clone --depth=1 "${{ env.SCRIPTS_REPO }}" sh
           git clone --depth=1 "${{ env.SUSFS_REPO }}" -b "gki-android14-6.1" susfs4ksu
@@ -307,7 +307,7 @@ jobs:
           export CROSS_COMPILE=${{ env.GCC_PATH }}
           export CC=${{ env.GCC_PATH }}gcc
           make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" olddefconfig
-          make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="\( CC" -j" \)(nproc --all)"
+          make O=out CROSS_COMPILE="$CROSS_COMPILE" CC="$CC" -j"$(nproc --all)"
 
       - name: Package Artifact
         run: |
@@ -317,7 +317,7 @@ jobs:
           else
             cat sultan/out/arch/arm64/boot/dts/google/*.dtb > AK3/dtb
           fi
-          ZIP_NAME="Sultan-\( {{ matrix.codename }}- \){{ steps.meta.outputs.s_tag }}-KowSU-SUSFS-r${{ steps.meta.outputs.ksu_ver }}.zip"
+          ZIP_NAME="Sultan-${{ matrix.codename }}-${{ steps.meta.outputs.s_tag }}-KowSU-SUSFS-r${{ steps.meta.outputs.ksu_ver }}.zip"
           cd AK3 && zip -r9 "../${ZIP_NAME}" . -x "*.git*"
           echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_ENV"
 
@@ -354,7 +354,7 @@ jobs:
           SHORT_SHA=${{ github.sha }}
           SHORT_SHA=${SHORT_SHA:0:7}
 
-          TAG="\( {DATE_STR}-r \){RUN_NUMBER}"
+          TAG="${DATE_STR}-r${RUN_NUMBER}"
 
           echo "RELEASE_TAG=$TAG" >> $GITHUB_ENV
           echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_ENV
