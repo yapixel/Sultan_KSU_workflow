@@ -107,6 +107,7 @@ jobs:
           # --- Core System & FS ---
           CONFIG_TMPFS_XATTR=y
           CONFIG_TMPFS_POSIX_ACL=y
+          CONFIG_LOG_BUF_SHIFT=21
           
           # --- Pillar 1: atp4pixel / Advanced Networking ---
           CONFIG_NETFILTER_ADVANCED=y
